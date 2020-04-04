@@ -1,0 +1,7 @@
+<launch>
+    <node pkg="competition_2019t2"
+        type="driver.py"
+        name="driver"
+        output="screen">
+    </node>
+</launch>
