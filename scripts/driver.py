@@ -1,5 +1,9 @@
 #! /usr/bin/env python
 
+# ENPH 353 final project: Self-driving vehicle with license-plate reading
+# Authors:
+#   Miles Justice
+#   David Widjaja 18950063
 import random
 import rospy
 import cv2 as cv
@@ -23,20 +27,25 @@ CANNY_L = 25
 
 #Probabilistic Hough Transform parameters
 #100 gives too little lines
-#85 is okay-ish
+#85 gives ~ the right number of lines
 #75 gives too many lines
-#30 gives too many lines
 HOUGH_THRESH_P = 85
 MIN_LINE = 25
 MAX_GAP = 75
 
 #Direction Thesholds
-#If the forward thresholds are too high, false negatives will occur
-#If the forward thresholds are too low, false positives will occur
 FWD_THRESH_P = 3        #at least 3 forward-facing lines should be available
 LEFT_THRESH_P = 1
 RIGHT_THRESH_P = 1
 MID_THRESH_P = 1
+
+#Color Filters
+RED_LOW = np.array([0,0,200])
+RED_HIGH = np.array([0,0,255])
+YG_LOW = np.array([0,0,0])
+YG_HIGH = np.array([40,150,150])
+BLUE_LOW = np.array([0,0,0])
+BLUE_HIGH = np.array([240,40,40])
 
 #Codes
 IDK = -1
@@ -60,26 +69,21 @@ movement = FWD
 move = Twist()
 n_turns = 0
 
-def edge_detector(cv_img_binary, blank_image, draw = True):
+turn_thresh = [20, 15, 20, 20]
 
-    #The Hough Transform cannot detect the edges of the lines, making it
-    #   more difficult to use than the Probabilistic Hough Transform
-
-    #Split the image into left and right sections. Horizontally invert the right image
-    
-    #Apply Hough Transform on both the left and inverted-right images
-
-    #lines on the left with angle < pi/3 are left-vertical
-    #lines on the left with angle > pi/3 are left-horizontal
-    #lines on the right with angle < pi/3 are right-vertical
-    #lines on the right with angle > pi/3 are right-horizontal
-
-    #Use Non-Probabilistic Hough Transform to find edges
-    edges = cv.Canny(cv_img_binary, CANNY_L, CANNY_H, apertureSize = 3)
-    lines = cv.HoughLines(edges, 1, np.pi/180, HOUGH_THRESH)
-    
-     
-
+#Counts the number and type of edges in the given image
+# cv_img_binary: greyscale opencv image, bgr color
+# blank_image: image to draw lines on
+# draw: True if observed lines should be drawn on blank_image
+#           blue represent horizontal lines
+#           green represent vertical lines
+#           red are unclassified lines
+# Returns: ((fwd_pt, left_pt, right_pt, middle_pt, idk_pt), blank_image)
+#           fwd_pt is the number of forward-pointing lines
+#           left_pt is number of horizontal lines on the left half of the image
+#           right_pt is number of horizontal lines on the right half of the image
+#           middle_pt is number of horizontal lines on the middle of the image
+#           idk_pt is the number of unclassified lines
 def edge_detector_p(cv_img_binary, blank_image, draw = True):
 
     #Use Probabilistic Hough Transform to find edges
@@ -135,6 +139,16 @@ def edge_detector_p(cv_img_binary, blank_image, draw = True):
 
     return ((fwd_pt, left_pt, right_pt, middle_pt, idk_pt), blank_image) 
 
+#Determines the possible directions of motion
+# edge_points: (fwd_pt, left_pt, right_pt, middle_pt)
+#           fwd_pt is the number of forward-pointing lines
+#           left_pt is number of horizontal lines on the left half of the image
+#           right_pt is number of horizontal lines on the right half of the image
+#           middle_pt is number of horizontal lines on the middle of the image
+# Returns: (forward, left, right)
+#           forward: True if the forward path is available
+#           left: True if the left path is available
+#           right: True if the right path is available
 def determine_motion(edge_points):
  
     #Determine what movements are currently available 
@@ -162,6 +176,8 @@ def determine_motion(edge_points):
    
     return (forward, left, right)
 
+#Controls the model vehicle
+# data: raw ROS image file
 def driver(data):
 
     global lock_movement
@@ -184,7 +200,7 @@ def driver(data):
     retval, cv_img_binary = cv.threshold(cv_img_gray, BINARY_THRESH, 255, cv.THRESH_BINARY)
 
     #Apply bandpass filter to obtain only red part of image
-    cv_redmask = cv.inRange(cv_img, np.array([0,0,200]), np.array([0,0,255]))
+    cv_redmask = cv.inRange(cv_img, RED_LOW, RED_HIGH)
 
     #Instantiate a blank array for illustration purposes
     blank_image = np.zeros((IMG_HEIGHT, IMG_WIDTH, 3), np.uint8)
@@ -251,7 +267,7 @@ def driver(data):
             elif evaluation_lock < 5:
 
                 print("Evaluating Turn, Trial {}".format(evaluation_lock))
-                edge_points, retval = edge_detector_p(cv_img_binary, blank_image, draw=False)
+                #edge_points, retval = edge_detector_p(cv_img_binary, blank_image, draw=False)
                 fwd_total = fwd_total + edge_points[0]
                 mid_total = mid_total + edge_points[3]
                 idk_total = idk_total + edge_points[4]
@@ -265,8 +281,10 @@ def driver(data):
                 print("Evaluation Data for turn {} obtained.".format(n_turns))
             
                 #evaluate whether the turn is really complete with stricter conditions 
-                if fwd_total >= (20) and idk_total == 0 and mid_total == 0 \
-                     and redmask_sum < 500000:
+                #For Turn 0, the threshold seems to be 20
+                #For Turn 1, the threshold seems to be 15
+                if fwd_total >= turn_thresh[n_turns % 4] and idk_total == 0 \
+                    and mid_total == 0 and redmask_sum < 500000:
             
                     print("Turn {} Complete".format(n_turns))
                     print("fwd_total: {}, redmask_sum: {}".format(fwd_total, redmask_sum))
@@ -464,39 +482,47 @@ def driver(data):
     cv.imshow('img', blank_image)
     cv.waitKey(1)
 
-
+#Function to test various aspects of the vehicle without controlling it
+# data: raw ROS image file
 def observer(data):
 
     global lock_movement
     global movement
 
-    #Apply filters to raw image
+    #Obtain and crop the original image
     cv_img = bridge.imgmsg_to_cv2(data, "bgr8")
-
+    cv_img_upper = cv_img
     cv_img = cv_img[-IMG_HEIGHT:, :, :]
 
-    cv_img_gray = cv.cvtColor(cv_img, cv.COLOR_BGR2GRAY)
-    kernel = np.ones((5,5), np.float32)/25
-    cv_img_gray = cv.filter2D(cv_img_gray,-1,kernel)
- 
-    retval, cv_img_binary = cv.threshold(cv_img_gray, BINARY_THRESH, 255, cv.THRESH_BINARY)
+    #grayscale, filter and threshold the original image
+    cv_img_gray = cv.cvtColor(cv_img_upper, cv.COLOR_BGR2GRAY)
+    #kernel = np.ones((5,5), np.float32)/25
+    #cv_img_gray = cv.filter2D(cv_img_gray,-1,kernel)
+    #retval, cv_img_binary = cv.threshold(cv_img_gray, BINARY_THRESH, 255, cv.THRESH_BINARY)
 
+    #add a red filter
     cv_redmask = cv.inRange(cv_img, np.array([0,0,200]), np.array([0,0,255]))
 
-    blank_image = np.zeros((IMG_HEIGHT, IMG_WIDTH, 3), np.uint8)
+    #add a yellow-green filter
+    cv_yellowgreenmask = cv.inRange(cv_img_upper, np.array([0,0,0]), np.array([40,150,150]))
+    
+    #add a blue filter. This one is ok so far.
+    cv_bluemask = cv.inRange(cv_img_upper, np.array([0,0,0]), np.array([240,40,40]))
+
+    #initialize a blank image
+    #blank_image = np.zeros((IMG_HEIGHT, IMG_WIDTH, 3), np.uint8)
 
     #Obtain edges to determine current position on board
-    edge_points, blank_image = edge_detector_p(cv_img_binary, blank_image)
+    #edge_points, blank_image = edge_detector_p(cv_img_binary, blank_image)
 
     #Obtain possible movements
-    forward, left, right = determine_motion(edge_points)
+    #forward, left, right = determine_motion(edge_points)
 
-    print("f: {} l: {} r: {} mid: {} fwd: {} left: {} right: {}".format(\
-        edge_points[0], edge_points[1], edge_points[2], edge_points[3], \
-        forward, left, right))
+    #print("f: {} l: {} r: {} mid: {} fwd: {} left: {} right: {}".format(\
+    #    edge_points[0], edge_points[1], edge_points[2], edge_points[3], \
+    #    forward, left, right))
 
-    cv.imshow("observer", blank_image)
-    cv.imshow("grayscale", cv_img_gray)
+    cv.imshow("yellowgreen", cv_yellowgreenmask)
     cv.waitKey(1)
 
 #Initialize the node
@@ -530,10 +556,11 @@ move.angular.z = 0.0
 pub_vel.publish(move)
 
 #Subscribe to camera
-sub_image = rospy.Subscriber("/rrbot/camera1/image_raw", Image, driver)
+sub_image = rospy.Subscriber("/rrbot/camera1/image_raw", Image, observer)
 
 #Bridge ros and opencv
 bridge = CvBridge()
 
 #Stops driver node from dying
 rospy.spin()
+
