@@ -4,6 +4,7 @@
 # Authors:
 #   Miles Justice
 #   David Widjaja 18950063
+
 import random
 import rospy
 import cv2 as cv
@@ -33,7 +34,8 @@ MIN_LINE = 25
 MAX_GAP = 75
 
 #Direction Thesholds
-FWD_THRESH_P = 3        #at least 3 forward-facing lines should be available
+FWD_THRESH_P = 3        #to confirm a way forward, 3 vertical lines are needed
+                        #to follow an available line, 2 vertical lines is good enough.
 LEFT_THRESH_P = 1
 RIGHT_THRESH_P = 1
 MID_THRESH_P = 1
@@ -189,8 +191,8 @@ def driver(data):
     global move
 
     #Obtain and crop the raw image
-    cv_img = bridge.imgmsg_to_cv2(data, "bgr8")
-    cv_img = cv_img[-IMG_HEIGHT:, :, :]
+    cv_img_raw = bridge.imgmsg_to_cv2(data, "bgr8")
+    cv_img = cv_img_raw[-IMG_HEIGHT:, :, :]
 
     #Apply greyscale, averaging, and thresholding to get binary image
     cv_img_gray = cv.cvtColor(cv_img, cv.COLOR_BGR2GRAY)
@@ -212,6 +214,29 @@ def driver(data):
     
     #if the vehicle is not in the middle of a turn, determine new movement
     if lock_movement == False:
+
+        if left != right:
+            #there is a possibility that the vehicle is misaligned so only 1
+            # horizontal edge is visible. This can be solved by temporarily increasing
+            # the size of the cropped image, exposing the hidden edges. If all goes 
+            # properly, this statement should only be reached at intersections.
+            
+            cv_img_mod = cv_img_raw[-(IMG_HEIGHT + 10):, :, :]
+            
+            cv_img_mod_gray = cv.cvtColor(cv_img_mod, cv.COLOR_BGR2GRAY)
+            cv_img_mod_gray = cv.filter2D(cv_img_mod_gray,-1,kernel)
+            retval, cv_img_mod_binary = cv.threshold(cv_img_mod_gray, BINARY_THRESH,\
+                                                     255, cv.THRESH_BINARY)
+            edge_points_mod, retval = edge_detector_p(cv_img_mod_binary,\
+                                                     blank_image, draw = False)
+            retval, left, right = determine_motion(edge_points)
+
+            cv.imshow("VARIATION", cv_img_mod_gray)
+             
+            if left == right:
+                print("By variation, a new edge was found")
+            else:
+                print("No new edge found")
  
         if forward == True and left == False and right == False:
             # The only way is forward.
@@ -237,10 +262,17 @@ def driver(data):
             print("Begin RIGHT movement")
 
         elif forward == False:
-            # Stop the car. Mission failed...for now
-            movement = IDK
-            print("Unknown Position.")
-            print("Forward: {} Left: {} Right: {}".format(forward,left,right))
+            #As long as left is still false and right is still false,
+            #   a way forward might still be possible. PID will then bring it
+            #   back to the centre.
+            if edge_points[0] >= 1 and left == False and right == False:
+                print("Warning: Vehicle is possibly off-course")
+                forward = True
+                movement = FWD
+            else:
+                movement = IDK
+                print("Unknown Position.")
+                print("Forward: {} Left: {} Right: {}".format(forward,left,right))
 
     #if the vehicle is in the middle of a turn 
     else:
@@ -252,10 +284,10 @@ def driver(data):
             #   results, as long as the same image is being used. This means that most of the
             #   error comes from the source image. So to average out random errors, different
             #   images from the same position must be used.
-        
+             
             #if the vehicle is not evaluating a turn yet, begin evaluating the turn
             if evaluation_lock == -1:
-
+            
                 print("Evaluation unlocked. Begin evaluating turn {}".format(n_turns))
                 evaluation_lock = 0
                 fwd_total = 0
@@ -292,9 +324,6 @@ def driver(data):
                     movement = FWD
                     lock_movement = False
                     n_turns = n_turns + 1
-
-                    #TEMPORARY: DELAY 
-                    #time.sleep(10)
 
                 else:
                     print("Turn Incomplete: fwd: {}, red: {}, idk: {} mid: {}".format(\
@@ -350,12 +379,11 @@ def driver(data):
         error = IMG_WIDTH/2 - int((upper + lower)/2)
         
         move = Twist()
-        move.linear.x = 0.20
+        move.linear.x = 1.0
         move.linear.y = 0.0
         
         kp = 3.0/IMG_WIDTH
         ki = 0
-        #kd = 10.0/IMG_WIDTH
         kd = 15.0/IMG_WIDTH
         
         proportional_response = kp * error
@@ -385,7 +413,7 @@ def driver(data):
             cv.imshow("before entering {}".format(n_turns), cv_img)
 
             #Fully enter the junction by waiting x seconds
-            time.sleep(1.5)
+            rospy.sleep(1.5)
 
             #Stop the car
             move = Twist()
@@ -406,7 +434,7 @@ def driver(data):
             move = Twist()
             move.linear.x = 0.0
             move.linear.y = 0.0
-            move.angular.z = 0.35
+            move.angular.z = 1.75
             pub_vel.publish(move)
         
         #If the vehicle is evaluating a turn
@@ -430,7 +458,7 @@ def driver(data):
             cv.imshow("before entering {}".format(n_turns), cv_img)
 
             #Fully enter the junction by waiting x seconds
-            time.sleep(1.5)
+            rospy.sleep(1.5)
             
             #Stop the car 
             move = Twist()
@@ -452,7 +480,7 @@ def driver(data):
             move = Twist()
             move.linear.x = 0.0
             move.linear.y = 0.0
-            move.angular.z = -0.35
+            move.angular.z = -1.75
             pub_vel.publish(move)
         
         #If the vehicle is evaluating a turn
@@ -533,7 +561,7 @@ rospy.loginfo('driver node started')
 pub_vel = rospy.Publisher('/cmd_vel', Twist, queue_size = 1)
 
 #Delay for observation purposes
-time.sleep(10)
+rospy.sleep(10)
 
 #Initialize the movement with a slight angle to demonstrate PID in action
 move = Twist()
@@ -545,7 +573,7 @@ move.angular.y = 0.0
 move.angular.z = 0.40
 pub_vel.publish(move)
 
-time.sleep(0.3)
+rospy.sleep(0.3)
 
 move.linear.x = 0.00
 move.linear.y = 0.0
