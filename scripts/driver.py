@@ -15,9 +15,8 @@ from geometry_msgs.msg import Twist
 
 #Robot Camera Parameters
 IMG_WIDTH = 640
-#Image Height has to be less than 480
-IMG_HEIGHT = 100
-
+IMG_HEIGHT = 100        #Image Height has to be less than 480
+ 
 #Only road lines are white, other features are black
 BINARY_THRESH = 250
 
@@ -112,10 +111,10 @@ def edge_detector_p(cv_img_binary, blank_image, draw = True):
             gradient = 1 #definitely vertical
 
         gradients.append(gradient)
-        if gradient > 0.7:
+        if gradient > 0.5:
             if draw == True:
                 cv.line(blank_image, (x1,y1), (x2,y2),\
-                         (random.randint(0,255),255,random.randint(0,255)),2)
+                         (0,255,0),2)
             fwd_pt = fwd_pt + 1
         elif gradient < 0.3:
             if draw == True:
@@ -295,7 +294,7 @@ def driver(data):
                     n_turns = n_turns + 1
 
                     #TEMPORARY: DELAY 
-                    time.sleep(10)
+                    #time.sleep(10)
 
                 else:
                     print("Turn Incomplete: fwd: {}, red: {}, idk: {} mid: {}".format(\
@@ -344,20 +343,21 @@ def driver(data):
         
         if upper_found == False:
             upper = IMG_WIDTH - 2
- 
+     
         cv.circle(blank_image, (upper, IMG_HEIGHT - 10), 10, (0,0,255), -1)
         cv.circle(blank_image, (lower, IMG_HEIGHT - 10), 10, (0,255,0), -1)
         
-        error = IMG_WIDTH/2 -  int((upper + lower)/2)
+        error = IMG_WIDTH/2 - int((upper + lower)/2)
         
         move = Twist()
         move.linear.x = 0.20
         move.linear.y = 0.0
-            
+        
         kp = 3.0/IMG_WIDTH
         ki = 0
-        kd = 10.0/IMG_WIDTH
-
+        #kd = 10.0/IMG_WIDTH
+        kd = 15.0/IMG_WIDTH
+        
         proportional_response = kp * error
         global integral_response
         global previous_error
@@ -502,13 +502,13 @@ def observer(data):
 
     #add a red filter
     cv_redmask = cv.inRange(cv_img, np.array([0,0,200]), np.array([0,0,255]))
-
+    
     #add a yellow-green filter
     cv_yellowgreenmask = cv.inRange(cv_img_upper, np.array([0,0,0]), np.array([40,150,150]))
     
     #add a blue filter. This one is ok so far.
     cv_bluemask = cv.inRange(cv_img_upper, np.array([0,0,0]), np.array([240,40,40]))
-
+    
     #initialize a blank image
     #blank_image = np.zeros((IMG_HEIGHT, IMG_WIDTH, 3), np.uint8)
 
@@ -542,7 +542,7 @@ move.linear.y = 0.0
 move.linear.z = 0.0
 move.angular.x = 0.0
 move.angular.y = 0.0
-move.angular.z = 0.3
+move.angular.z = 0.40
 pub_vel.publish(move)
 
 time.sleep(0.3)
@@ -556,7 +556,7 @@ move.angular.z = 0.0
 pub_vel.publish(move)
 
 #Subscribe to camera
-sub_image = rospy.Subscriber("/rrbot/camera1/image_raw", Image, observer)
+sub_image = rospy.Subscriber("/rrbot/camera1/image_raw", Image, driver)
 
 #Bridge ros and opencv
 bridge = CvBridge()
