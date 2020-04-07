@@ -1,18 +1,25 @@
 #! /usr/bin/env python
 
 # ENPH 353 final project: Self-driving vehicle with license-plate reading
+# driver.py: script which handles the vehicle driving
 # Authors:
 #   Miles Justice
 #   David Widjaja 18950063
 
 import random
-import rospy
+import time
+
 import cv2 as cv
 import numpy as np
-import time
+
+#ROS-specific libraries
+import rospy
 from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
 from geometry_msgs.msg import Twist
+
+#local functions
+#import car_finder
 
 #Robot Camera Parameters
 IMG_WIDTH = 640
@@ -547,13 +554,13 @@ def observer(data):
     cv_img = cv_img[-IMG_HEIGHT:, :, :]
 
     #grayscale, filter and threshold the original image
-    #cv_img_gray = cv.cvtColor(cv_img_upper, cv.COLOR_BGR2GRAY)
+    cv_img_gray = cv.cvtColor(cv_img_upper, cv.COLOR_BGR2GRAY)
     #kernel = np.ones((5,5), np.float32)/25
     #cv_img_gray = cv.filter2D(cv_img_gray,-1,kernel)
     #retval, cv_img_binary = cv.threshold(cv_img_gray, BINARY_THRESH, 255, cv.THRESH_BINARY)
 
     #add a red filter
-    cv_redmask = cv.inRange(cv_img_upper, RED_LOW, RED_HIGH)
+    #cv_redmask = cv.inRange(cv_img_upper, RED_LOW, RED_HIGH)
     
     #add a yellow-green filter
     #cv_yellowgreenmask = cv.inRange(cv_img_upper, np.array([0,0,0]), np.array([40,150,150]))
@@ -574,9 +581,9 @@ def observer(data):
     #    edge_points[0], edge_points[1], edge_points[2], edge_points[3], \
     #    forward, left, right))
 
-    print("RED: {}".format(cv_redmask.sum()))
+    #print("RED: {}".format(cv_redmask.sum()))
 
-    cv.imshow("img", cv_img_upper)
+    cv.imshow("img", cv_img_gray)
     cv.waitKey(1)
 
 #Initialize the node
@@ -610,7 +617,7 @@ move.angular.z = 0.0
 pub_vel.publish(move)
 
 #Subscribe to camera
-sub_image = rospy.Subscriber("/rrbot/camera1/image_raw", Image, driver)
+sub_image = rospy.Subscriber("/rrbot/camera1/image_raw", Image, observer)
 
 #Bridge ros and opencv
 bridge = CvBridge()
