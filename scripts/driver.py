@@ -4,6 +4,7 @@
 # Authors:
 #   Miles Justice
 #   David Widjaja 18950063
+
 import random
 import rospy
 import cv2 as cv
@@ -15,9 +16,8 @@ from geometry_msgs.msg import Twist
 
 #Robot Camera Parameters
 IMG_WIDTH = 640
-#Image Height has to be less than 480
-IMG_HEIGHT = 100
-
+IMG_HEIGHT = 100        #Image Height has to be less than 480
+ 
 #Only road lines are white, other features are black
 BINARY_THRESH = 250
 
@@ -34,7 +34,8 @@ MIN_LINE = 25
 MAX_GAP = 75
 
 #Direction Thesholds
-FWD_THRESH_P = 3        #at least 3 forward-facing lines should be available
+FWD_THRESH_P = 3        #to confirm a way forward, 3 vertical lines are needed
+                        #to follow an available line, 2 vertical lines is good enough.
 LEFT_THRESH_P = 1
 RIGHT_THRESH_P = 1
 MID_THRESH_P = 1
@@ -69,7 +70,7 @@ movement = FWD
 move = Twist()
 n_turns = 0
 
-turn_thresh = [20, 15, 20, 20]
+turn_thresh = [20, 15, 20, 18]
 
 #Counts the number and type of edges in the given image
 # cv_img_binary: greyscale opencv image, bgr color
@@ -112,10 +113,10 @@ def edge_detector_p(cv_img_binary, blank_image, draw = True):
             gradient = 1 #definitely vertical
 
         gradients.append(gradient)
-        if gradient > 0.7:
+        if gradient > 0.5:
             if draw == True:
                 cv.line(blank_image, (x1,y1), (x2,y2),\
-                         (random.randint(0,255),255,random.randint(0,255)),2)
+                         (0,255,0),2)
             fwd_pt = fwd_pt + 1
         elif gradient < 0.3:
             if draw == True:
@@ -134,9 +135,9 @@ def edge_detector_p(cv_img_binary, blank_image, draw = True):
             if draw == True:
                 cv.line(blank_image, (x1,y1), (x2,y2), (0,0,255),2)
             idk_pt = idk_pt + 1
-
+    
     print("f:{},l:{},r:{},m:{},idk:{}".format(fwd_pt,left_pt,right_pt,middle_pt,idk_pt))
-
+    
     return ((fwd_pt, left_pt, right_pt, middle_pt, idk_pt), blank_image) 
 
 #Determines the possible directions of motion
@@ -190,17 +191,14 @@ def driver(data):
     global move
 
     #Obtain and crop the raw image
-    cv_img = bridge.imgmsg_to_cv2(data, "bgr8")
-    cv_img = cv_img[-IMG_HEIGHT:, :, :]
+    cv_img_raw = bridge.imgmsg_to_cv2(data, "bgr8")
+    cv_img = cv_img_raw[-IMG_HEIGHT:, :, :]
 
     #Apply greyscale, averaging, and thresholding to get binary image
     cv_img_gray = cv.cvtColor(cv_img, cv.COLOR_BGR2GRAY)
     kernel = np.ones((5,5), np.float32)/25
     cv_img_gray = cv.filter2D(cv_img_gray,-1,kernel)
     retval, cv_img_binary = cv.threshold(cv_img_gray, BINARY_THRESH, 255, cv.THRESH_BINARY)
-
-    #Apply bandpass filter to obtain only red part of image
-    cv_redmask = cv.inRange(cv_img, RED_LOW, RED_HIGH)
 
     #Instantiate a blank array for illustration purposes
     blank_image = np.zeros((IMG_HEIGHT, IMG_WIDTH, 3), np.uint8)
@@ -213,36 +211,79 @@ def driver(data):
     
     #if the vehicle is not in the middle of a turn, determine new movement
     if lock_movement == False:
- 
+       
+        if left != right:
+            #there is a possibility that the vehicle is misaligned so only 1
+            # horizontal edge is visible. This can be solved by temporarily increasing
+            # the size of the cropped image, exposing the hidden edges. If all goes 
+            # properly, this statement should only be reached at intersections.
+            
+            print("Starting Variation on left: {} right: {}".format(left, right))
+       
+            #Get an enlarged version of the target image 
+            #10 is too little to detect the new edge
+            cv_img_mod = cv_img_raw[-(IMG_HEIGHT + 25):, :, :]
+            cv_img_mod_gray = cv.cvtColor(cv_img_mod, cv.COLOR_BGR2GRAY)
+            cv_img_mod_gray = cv.filter2D(cv_img_mod_gray,-1,kernel)
+            retval, cv_img_mod_binary = cv.threshold(cv_img_mod_gray, BINARY_THRESH,\
+                                                     255, cv.THRESH_BINARY)
+            
+            #Obtain a new set of edges
+            edge_points_mod, cv_img_mod = edge_detector_p(cv_img_mod_binary, cv_img_mod)
+            retval, left_new, right_new = determine_motion(edge_points_mod)
+             
+            cv.imshow("VARIATION", cv_img_mod)
+            
+            #If the first reading is incorrect and the variation corrected it, 
+            if left_new == right_new:
+                left = left_new
+                right = right_new
+                print("New edge found: left: {} right: {}".format(left, right))
+            else:
+                print("No new edge found: left: {} right: {}".format(left, right))
+             
         if forward == True and left == False and right == False:
             # The only way is forward.
             movement = FWD
             print("F")
-
+             
         elif forward == True and left == True and right == True:
             # Open a decision to turn left, right or continue forwards
             movement = RIGHT 
             print("Left, Right, Forward Positions Available")
             print("Begin RIGHT movement")
-    
+             
         elif forward == True and left == True and right == False:
             # Open a decision to turn left or continue forwards
             movement = LEFT
             print("Left, Forward Positions Available")
             print("Begin LEFT movement")
-
+             
         elif forward == True and left == False and right == True:
             # Open a decision to turn right or continue forwards
             movement = RIGHT
             print("Right, Forward positions available")
             print("Begin RIGHT movement")
-
+         
         elif forward == False:
-            # Stop the car. Mission failed...for now
-            movement = IDK
-            print("Unknown Position.")
-            print("Forward: {} Left: {} Right: {}".format(forward,left,right))
-
+            #As long as left is still false and right is still false,
+            #   a way forward might still be possible. PID will then bring it
+            #   back to the centre.
+            if edge_points[0] >= 1 and left == False and right == False:
+                print("Warning: Vehicle is moving forward but may be off course")
+                forward = True
+                movement = FWD
+            elif edge_points[0] >= 2 and left == True and right == False:
+                print("Warning: Vehicle detects left but may be off course")
+                movement = LEFT
+            elif edge_points[0] >= 2 and left == False and right == True:
+                print("Warning: Vehicle detects right but may be off course")
+                movement = RIGHT 
+            else:
+                movement = IDK
+                print("Unknown Position.")
+                print("Forward: {} Left: {} Right: {}".format(forward,left,right))
+        
     #if the vehicle is in the middle of a turn 
     else:
        
@@ -253,10 +294,10 @@ def driver(data):
             #   results, as long as the same image is being used. This means that most of the
             #   error comes from the source image. So to average out random errors, different
             #   images from the same position must be used.
-        
+             
             #if the vehicle is not evaluating a turn yet, begin evaluating the turn
             if evaluation_lock == -1:
-
+            
                 print("Evaluation unlocked. Begin evaluating turn {}".format(n_turns))
                 evaluation_lock = 0
                 fwd_total = 0
@@ -275,6 +316,9 @@ def driver(data):
                 evaluation_lock = evaluation_lock + 1
  
             elif evaluation_lock == 5:
+   
+               #Apply bandpass filter to obtain only red part of image
+                cv_redmask = cv.inRange(cv_img_raw[-(IMG_HEIGHT+40):, :, :], RED_LOW, RED_HIGH)
 
                 redmask_sum = cv_redmask.sum()
             
@@ -288,14 +332,14 @@ def driver(data):
             
                     print("Turn {} Complete".format(n_turns))
                     print("fwd_total: {}, redmask_sum: {}".format(fwd_total, redmask_sum))
-                    cv.imshow("turn_completed_{}_edges".format(n_turns), blank_image)
-                    cv.imshow("turn_completed_{}_color".format(n_turns), cv_img)
+
+                    #TESTING
+                    #cv.imshow("turn_completed_{}_edges".format(n_turns), blank_image)
+                    #cv.imshow("turn_completed_{}_color".format(n_turns), cv_img)
+
                     movement = FWD
                     lock_movement = False
                     n_turns = n_turns + 1
-
-                    #TEMPORARY: DELAY 
-                    time.sleep(10)
 
                 else:
                     print("Turn Incomplete: fwd: {}, red: {}, idk: {} mid: {}".format(\
@@ -306,7 +350,7 @@ def driver(data):
 
     #If the vehicle should move forward, apply PID on the edges of the line
     if movement == FWD:
-        
+         
         #sum the thresholded image to reduce random error
         row = []
         for i in range(IMG_WIDTH):
@@ -329,7 +373,7 @@ def driver(data):
         
         if lower_found == False:
             lower = 0
-        
+         
         #find the upper bound
         upper = IMG_WIDTH/2
         c = IMG_WIDTH/2
@@ -341,22 +385,22 @@ def driver(data):
                 upper_found = True
                 break
             c = c + 1
-        
+          
         if upper_found == False:
             upper = IMG_WIDTH - 2
- 
+          
         cv.circle(blank_image, (upper, IMG_HEIGHT - 10), 10, (0,0,255), -1)
         cv.circle(blank_image, (lower, IMG_HEIGHT - 10), 10, (0,255,0), -1)
         
-        error = IMG_WIDTH/2 -  int((upper + lower)/2)
+        error = IMG_WIDTH/2 - int((upper + lower)/2)
         
         move = Twist()
-        move.linear.x = 0.20
+        move.linear.x = 1.0
         move.linear.y = 0.0
-            
-        kp = 3.0/IMG_WIDTH
+        
+        kp = 6.0/IMG_WIDTH
         ki = 0
-        kd = 10.0/IMG_WIDTH
+        kd = 20.0/IMG_WIDTH
 
         proportional_response = kp * error
         global integral_response
@@ -367,13 +411,13 @@ def driver(data):
         elif integral_response < -INTEGRAL_WINDUP:
             integral_response = -INTEGRAL_WINDUP
         differential_response = kd * (error - previous_error)
-        
+         
         move.angular.z = proportional_response + differential_response + integral_response
-            
+             
         pub_vel.publish(move)
-            
+             
         previous_error = error
-
+        
     #Execute semi-hardcoded subroutine to turn left.        
     elif movement == LEFT:
 
@@ -381,11 +425,12 @@ def driver(data):
         if lock_movement == False:
             
             print("Entering Junction: ")
-
-            cv.imshow("before entering {}".format(n_turns), cv_img)
+            
+            #TESTING
+            #cv.imshow("before entering {}".format(n_turns), cv_img)
 
             #Fully enter the junction by waiting x seconds
-            time.sleep(1.5)
+            rospy.sleep(1.5)
 
             #Stop the car
             move = Twist()
@@ -406,7 +451,7 @@ def driver(data):
             move = Twist()
             move.linear.x = 0.0
             move.linear.y = 0.0
-            move.angular.z = 0.35
+            move.angular.z = 1.75
             pub_vel.publish(move)
         
         #If the vehicle is evaluating a turn
@@ -424,20 +469,20 @@ def driver(data):
 
         #If it is the first movement to the right,
         if lock_movement == False:
-
-            print("Entering Junction: ")
             
-            cv.imshow("before entering {}".format(n_turns), cv_img)
+            print("Entering Junction: ")
+           
+            #TESTING 
+            #cv.imshow("before entering {}".format(n_turns), cv_img)
 
             #Fully enter the junction by waiting x seconds
-            time.sleep(1.5)
+            rospy.sleep(1.5)
             
             #Stop the car 
             move = Twist()
             move.linear.x = 0.0
             move.linear.y = 0.0
             move.angular.z = 0.0
-
             pub_vel.publish(move)
 
             print("Junction Entered. Beginning RIGHT TURN")
@@ -452,7 +497,7 @@ def driver(data):
             move = Twist()
             move.linear.x = 0.0
             move.linear.y = 0.0
-            move.angular.z = -0.35
+            move.angular.z = -1.75
             pub_vel.publish(move)
         
         #If the vehicle is evaluating a turn
@@ -474,10 +519,17 @@ def driver(data):
         move.angular.z = 0.0
         pub_vel.publish(move)
         
-        print("Vehicle has been stopped.")
-        cv.imshow('error', blank_image)
+        print("Vehicle has been stopped for safety reasons. Dumping state...")
+        print("f: {} l: {} r: {} m: idk: {}".format(edge_points[0], edge_points[1], \
+                    edge_points[2], edge_points[3], edge_points[4]))
+        cv.imshow('error_lines', blank_image)
+        cv.waitKey(1)
         
-        #continue running, as this might just be a random error
+        cv.imshow('error_raw', cv_img)
+        cv.waitKey(1)
+
+        while True:
+            continue
 
     cv.imshow('img', blank_image)
     cv.waitKey(1)
@@ -495,20 +547,20 @@ def observer(data):
     cv_img = cv_img[-IMG_HEIGHT:, :, :]
 
     #grayscale, filter and threshold the original image
-    cv_img_gray = cv.cvtColor(cv_img_upper, cv.COLOR_BGR2GRAY)
+    #cv_img_gray = cv.cvtColor(cv_img_upper, cv.COLOR_BGR2GRAY)
     #kernel = np.ones((5,5), np.float32)/25
     #cv_img_gray = cv.filter2D(cv_img_gray,-1,kernel)
     #retval, cv_img_binary = cv.threshold(cv_img_gray, BINARY_THRESH, 255, cv.THRESH_BINARY)
 
     #add a red filter
-    cv_redmask = cv.inRange(cv_img, np.array([0,0,200]), np.array([0,0,255]))
-
+    cv_redmask = cv.inRange(cv_img_upper, RED_LOW, RED_HIGH)
+    
     #add a yellow-green filter
-    cv_yellowgreenmask = cv.inRange(cv_img_upper, np.array([0,0,0]), np.array([40,150,150]))
+    #cv_yellowgreenmask = cv.inRange(cv_img_upper, np.array([0,0,0]), np.array([40,150,150]))
     
     #add a blue filter. This one is ok so far.
-    cv_bluemask = cv.inRange(cv_img_upper, np.array([0,0,0]), np.array([240,40,40]))
-
+    #cv_bluemask = cv.inRange(cv_img_upper, np.array([0,0,0]), np.array([240,40,40]))
+    
     #initialize a blank image
     #blank_image = np.zeros((IMG_HEIGHT, IMG_WIDTH, 3), np.uint8)
 
@@ -522,7 +574,9 @@ def observer(data):
     #    edge_points[0], edge_points[1], edge_points[2], edge_points[3], \
     #    forward, left, right))
 
-    cv.imshow("yellowgreen", cv_yellowgreenmask)
+    print("RED: {}".format(cv_redmask.sum()))
+
+    cv.imshow("img", cv_img_upper)
     cv.waitKey(1)
 
 #Initialize the node
@@ -533,7 +587,7 @@ rospy.loginfo('driver node started')
 pub_vel = rospy.Publisher('/cmd_vel', Twist, queue_size = 1)
 
 #Delay for observation purposes
-time.sleep(10)
+rospy.sleep(10)
 
 #Initialize the movement with a slight angle to demonstrate PID in action
 move = Twist()
@@ -542,10 +596,10 @@ move.linear.y = 0.0
 move.linear.z = 0.0
 move.angular.x = 0.0
 move.angular.y = 0.0
-move.angular.z = 0.3
+move.angular.z = 0.50
 pub_vel.publish(move)
 
-time.sleep(0.3)
+rospy.sleep(0.3)
 
 move.linear.x = 0.00
 move.linear.y = 0.0
@@ -556,7 +610,7 @@ move.angular.z = 0.0
 pub_vel.publish(move)
 
 #Subscribe to camera
-sub_image = rospy.Subscriber("/rrbot/camera1/image_raw", Image, observer)
+sub_image = rospy.Subscriber("/rrbot/camera1/image_raw", Image, driver)
 
 #Bridge ros and opencv
 bridge = CvBridge()
