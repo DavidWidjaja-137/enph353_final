@@ -70,7 +70,7 @@ movement = FWD
 move = Twist()
 n_turns = 0
 
-turn_thresh = [20, 15, 20, 20]
+turn_thresh = [20, 15, 20, 18]
 
 #Counts the number and type of edges in the given image
 # cv_img_binary: greyscale opencv image, bgr color
@@ -135,9 +135,9 @@ def edge_detector_p(cv_img_binary, blank_image, draw = True):
             if draw == True:
                 cv.line(blank_image, (x1,y1), (x2,y2), (0,0,255),2)
             idk_pt = idk_pt + 1
-
+    
     print("f:{},l:{},r:{},m:{},idk:{}".format(fwd_pt,left_pt,right_pt,middle_pt,idk_pt))
-
+    
     return ((fwd_pt, left_pt, right_pt, middle_pt, idk_pt), blank_image) 
 
 #Determines the possible directions of motion
@@ -174,9 +174,6 @@ def determine_motion(edge_points):
     #   F           F           T      the forward road is blocked
     #   F           T           F      the forward road is blocked
     #   F           T           T      the forward road is blocked
-
-    if left == True and right == True:
-        print("OK left = True and right = True. Both available ^_^")
    
     return (forward, left, right)
 
@@ -202,9 +199,6 @@ def driver(data):
     kernel = np.ones((5,5), np.float32)/25
     cv_img_gray = cv.filter2D(cv_img_gray,-1,kernel)
     retval, cv_img_binary = cv.threshold(cv_img_gray, BINARY_THRESH, 255, cv.THRESH_BINARY)
-
-    #Apply bandpass filter to obtain only red part of image
-    cv_redmask = cv.inRange(cv_img, RED_LOW, RED_HIGH)
 
     #Instantiate a blank array for illustration purposes
     blank_image = np.zeros((IMG_HEIGHT, IMG_WIDTH, 3), np.uint8)
@@ -236,11 +230,14 @@ def driver(data):
             
             #Obtain a new set of edges
             edge_points_mod, cv_img_mod = edge_detector_p(cv_img_mod_binary, cv_img_mod)
-            retval, left, right = determine_motion(edge_points_mod)
+            retval, left_new, right_new = determine_motion(edge_points_mod)
              
             cv.imshow("VARIATION", cv_img_mod)
-             
-            if left == right:
+            
+            #If the first reading is incorrect and the variation corrected it, 
+            if left_new == right_new:
+                left = left_new
+                right = right_new
                 print("New edge found: left: {} right: {}".format(left, right))
             else:
                 print("No new edge found: left: {} right: {}".format(left, right))
@@ -249,25 +246,25 @@ def driver(data):
             # The only way is forward.
             movement = FWD
             print("F")
-        
+             
         elif forward == True and left == True and right == True:
             # Open a decision to turn left, right or continue forwards
             movement = RIGHT 
             print("Left, Right, Forward Positions Available")
             print("Begin RIGHT movement")
-         
+             
         elif forward == True and left == True and right == False:
             # Open a decision to turn left or continue forwards
             movement = LEFT
             print("Left, Forward Positions Available")
             print("Begin LEFT movement")
-        
+             
         elif forward == True and left == False and right == True:
             # Open a decision to turn right or continue forwards
             movement = RIGHT
             print("Right, Forward positions available")
             print("Begin RIGHT movement")
-        
+         
         elif forward == False:
             #As long as left is still false and right is still false,
             #   a way forward might still be possible. PID will then bring it
@@ -319,6 +316,9 @@ def driver(data):
                 evaluation_lock = evaluation_lock + 1
  
             elif evaluation_lock == 5:
+   
+               #Apply bandpass filter to obtain only red part of image
+                cv_redmask = cv.inRange(cv_img_raw[-(IMG_HEIGHT+40):, :, :], RED_LOW, RED_HIGH)
 
                 redmask_sum = cv_redmask.sum()
             
@@ -483,7 +483,6 @@ def driver(data):
             move.linear.x = 0.0
             move.linear.y = 0.0
             move.angular.z = 0.0
-
             pub_vel.publish(move)
 
             print("Junction Entered. Beginning RIGHT TURN")
@@ -520,10 +519,17 @@ def driver(data):
         move.angular.z = 0.0
         pub_vel.publish(move)
         
-        print("Vehicle has been stopped.")
-        cv.imshow('error', blank_image)
+        print("Vehicle has been stopped for safety reasons. Dumping state...")
+        print("f: {} l: {} r: {} m: idk: {}".format(edge_points[0], edge_points[1], \
+                    edge_points[2], edge_points[3], edge_points[4]))
+        cv.imshow('error_lines', blank_image)
+        cv.waitKey(1)
         
-        #continue running, as this might just be a random error
+        cv.imshow('error_raw', cv_img)
+        cv.waitKey(1)
+
+        while True:
+            continue
 
     cv.imshow('img', blank_image)
     cv.waitKey(1)
@@ -541,19 +547,19 @@ def observer(data):
     cv_img = cv_img[-IMG_HEIGHT:, :, :]
 
     #grayscale, filter and threshold the original image
-    cv_img_gray = cv.cvtColor(cv_img_upper, cv.COLOR_BGR2GRAY)
+    #cv_img_gray = cv.cvtColor(cv_img_upper, cv.COLOR_BGR2GRAY)
     #kernel = np.ones((5,5), np.float32)/25
     #cv_img_gray = cv.filter2D(cv_img_gray,-1,kernel)
     #retval, cv_img_binary = cv.threshold(cv_img_gray, BINARY_THRESH, 255, cv.THRESH_BINARY)
 
     #add a red filter
-    cv_redmask = cv.inRange(cv_img, np.array([0,0,200]), np.array([0,0,255]))
+    cv_redmask = cv.inRange(cv_img_upper, RED_LOW, RED_HIGH)
     
     #add a yellow-green filter
-    cv_yellowgreenmask = cv.inRange(cv_img_upper, np.array([0,0,0]), np.array([40,150,150]))
+    #cv_yellowgreenmask = cv.inRange(cv_img_upper, np.array([0,0,0]), np.array([40,150,150]))
     
     #add a blue filter. This one is ok so far.
-    cv_bluemask = cv.inRange(cv_img_upper, np.array([0,0,0]), np.array([240,40,40]))
+    #cv_bluemask = cv.inRange(cv_img_upper, np.array([0,0,0]), np.array([240,40,40]))
     
     #initialize a blank image
     #blank_image = np.zeros((IMG_HEIGHT, IMG_WIDTH, 3), np.uint8)
@@ -568,7 +574,9 @@ def observer(data):
     #    edge_points[0], edge_points[1], edge_points[2], edge_points[3], \
     #    forward, left, right))
 
-    cv.imshow("yellowgreen", cv_yellowgreenmask)
+    print("RED: {}".format(cv_redmask.sum()))
+
+    cv.imshow("img", cv_img_upper)
     cv.waitKey(1)
 
 #Initialize the node
