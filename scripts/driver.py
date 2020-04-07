@@ -174,6 +174,9 @@ def determine_motion(edge_points):
     #   F           F           T      the forward road is blocked
     #   F           T           F      the forward road is blocked
     #   F           T           T      the forward road is blocked
+
+    if left == True and right == True:
+        print("OK left = True and right = True. Both available ^_^")
    
     return (forward, left, right)
 
@@ -214,66 +217,76 @@ def driver(data):
     
     #if the vehicle is not in the middle of a turn, determine new movement
     if lock_movement == False:
-
+       
         if left != right:
             #there is a possibility that the vehicle is misaligned so only 1
             # horizontal edge is visible. This can be solved by temporarily increasing
             # the size of the cropped image, exposing the hidden edges. If all goes 
             # properly, this statement should only be reached at intersections.
             
-            cv_img_mod = cv_img_raw[-(IMG_HEIGHT + 10):, :, :]
-            
+            print("Starting Variation on left: {} right: {}".format(left, right))
+       
+            #Get an enlarged version of the target image 
+            #10 is too little to detect the new edge
+            cv_img_mod = cv_img_raw[-(IMG_HEIGHT + 25):, :, :]
             cv_img_mod_gray = cv.cvtColor(cv_img_mod, cv.COLOR_BGR2GRAY)
             cv_img_mod_gray = cv.filter2D(cv_img_mod_gray,-1,kernel)
             retval, cv_img_mod_binary = cv.threshold(cv_img_mod_gray, BINARY_THRESH,\
                                                      255, cv.THRESH_BINARY)
-            edge_points_mod, retval = edge_detector_p(cv_img_mod_binary,\
-                                                     blank_image, draw = False)
-            retval, left, right = determine_motion(edge_points)
-
-            cv.imshow("VARIATION", cv_img_mod_gray)
+            
+            #Obtain a new set of edges
+            edge_points_mod, cv_img_mod = edge_detector_p(cv_img_mod_binary, cv_img_mod)
+            retval, left, right = determine_motion(edge_points_mod)
+             
+            cv.imshow("VARIATION", cv_img_mod)
              
             if left == right:
-                print("By variation, a new edge was found")
+                print("New edge found: left: {} right: {}".format(left, right))
             else:
-                print("No new edge found")
- 
+                print("No new edge found: left: {} right: {}".format(left, right))
+             
         if forward == True and left == False and right == False:
             # The only way is forward.
             movement = FWD
             print("F")
-
+        
         elif forward == True and left == True and right == True:
             # Open a decision to turn left, right or continue forwards
             movement = RIGHT 
             print("Left, Right, Forward Positions Available")
             print("Begin RIGHT movement")
-    
+         
         elif forward == True and left == True and right == False:
             # Open a decision to turn left or continue forwards
             movement = LEFT
             print("Left, Forward Positions Available")
             print("Begin LEFT movement")
-
+        
         elif forward == True and left == False and right == True:
             # Open a decision to turn right or continue forwards
             movement = RIGHT
             print("Right, Forward positions available")
             print("Begin RIGHT movement")
-
+        
         elif forward == False:
             #As long as left is still false and right is still false,
             #   a way forward might still be possible. PID will then bring it
             #   back to the centre.
             if edge_points[0] >= 1 and left == False and right == False:
-                print("Warning: Vehicle is possibly off-course")
+                print("Warning: Vehicle is moving forward but may be off course")
                 forward = True
                 movement = FWD
+            elif edge_points[0] >= 2 and left == True and right == False:
+                print("Warning: Vehicle detects left but may be off course")
+                movement = LEFT
+            elif edge_points[0] >= 2 and left == False and right == True:
+                print("Warning: Vehicle detects right but may be off course")
+                movement = RIGHT 
             else:
                 movement = IDK
                 print("Unknown Position.")
                 print("Forward: {} Left: {} Right: {}".format(forward,left,right))
-
+        
     #if the vehicle is in the middle of a turn 
     else:
        
@@ -319,8 +332,11 @@ def driver(data):
             
                     print("Turn {} Complete".format(n_turns))
                     print("fwd_total: {}, redmask_sum: {}".format(fwd_total, redmask_sum))
-                    cv.imshow("turn_completed_{}_edges".format(n_turns), blank_image)
-                    cv.imshow("turn_completed_{}_color".format(n_turns), cv_img)
+
+                    #TESTING
+                    #cv.imshow("turn_completed_{}_edges".format(n_turns), blank_image)
+                    #cv.imshow("turn_completed_{}_color".format(n_turns), cv_img)
+
                     movement = FWD
                     lock_movement = False
                     n_turns = n_turns + 1
@@ -334,7 +350,7 @@ def driver(data):
 
     #If the vehicle should move forward, apply PID on the edges of the line
     if movement == FWD:
-        
+         
         #sum the thresholded image to reduce random error
         row = []
         for i in range(IMG_WIDTH):
@@ -357,7 +373,7 @@ def driver(data):
         
         if lower_found == False:
             lower = 0
-        
+         
         #find the upper bound
         upper = IMG_WIDTH/2
         c = IMG_WIDTH/2
@@ -369,10 +385,10 @@ def driver(data):
                 upper_found = True
                 break
             c = c + 1
-        
+          
         if upper_found == False:
             upper = IMG_WIDTH - 2
-     
+          
         cv.circle(blank_image, (upper, IMG_HEIGHT - 10), 10, (0,0,255), -1)
         cv.circle(blank_image, (lower, IMG_HEIGHT - 10), 10, (0,255,0), -1)
         
@@ -382,10 +398,10 @@ def driver(data):
         move.linear.x = 1.0
         move.linear.y = 0.0
         
-        kp = 3.0/IMG_WIDTH
+        kp = 6.0/IMG_WIDTH
         ki = 0
-        kd = 15.0/IMG_WIDTH
-        
+        kd = 20.0/IMG_WIDTH
+
         proportional_response = kp * error
         global integral_response
         global previous_error
@@ -395,13 +411,13 @@ def driver(data):
         elif integral_response < -INTEGRAL_WINDUP:
             integral_response = -INTEGRAL_WINDUP
         differential_response = kd * (error - previous_error)
-        
+         
         move.angular.z = proportional_response + differential_response + integral_response
-            
+             
         pub_vel.publish(move)
-            
+             
         previous_error = error
-
+        
     #Execute semi-hardcoded subroutine to turn left.        
     elif movement == LEFT:
 
@@ -409,8 +425,9 @@ def driver(data):
         if lock_movement == False:
             
             print("Entering Junction: ")
-
-            cv.imshow("before entering {}".format(n_turns), cv_img)
+            
+            #TESTING
+            #cv.imshow("before entering {}".format(n_turns), cv_img)
 
             #Fully enter the junction by waiting x seconds
             rospy.sleep(1.5)
@@ -452,10 +469,11 @@ def driver(data):
 
         #If it is the first movement to the right,
         if lock_movement == False:
-
-            print("Entering Junction: ")
             
-            cv.imshow("before entering {}".format(n_turns), cv_img)
+            print("Entering Junction: ")
+           
+            #TESTING 
+            #cv.imshow("before entering {}".format(n_turns), cv_img)
 
             #Fully enter the junction by waiting x seconds
             rospy.sleep(1.5)
@@ -570,7 +588,7 @@ move.linear.y = 0.0
 move.linear.z = 0.0
 move.angular.x = 0.0
 move.angular.y = 0.0
-move.angular.z = 0.40
+move.angular.z = 0.50
 pub_vel.publish(move)
 
 rospy.sleep(0.3)
