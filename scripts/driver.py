@@ -8,6 +8,7 @@
 
 import random
 import time
+import sys
 
 import cv2 as cv
 import numpy as np
@@ -20,6 +21,11 @@ from geometry_msgs.msg import Twist
 
 #local functions
 #import car_finder
+
+#print("using rospy version: {}".format(rospy.__version__))
+#print("using Image version: {}".format(Image.__version))
+#print("using CvBridge version: {}".format(CvBridge.__version__))
+#print("using Twist version: {}".format(Twist.__version))
 
 #Robot Camera Parameters
 IMG_WIDTH = 640
@@ -548,6 +554,7 @@ def observer(data):
     global lock_movement
     global movement
 
+    print("observing")
     #Obtain and crop the original image
     cv_img = bridge.imgmsg_to_cv2(data, "bgr8")
     cv_img_upper = cv_img
@@ -582,6 +589,8 @@ def observer(data):
     #    forward, left, right))
 
     #print("RED: {}".format(cv_redmask.sum()))
+    
+    car_finder.match_car(cv_img_gray)
 
     cv.imshow("img", cv_img_gray)
     cv.waitKey(1)
@@ -616,11 +625,19 @@ move.angular.y = 0.0
 move.angular.z = 0.0
 pub_vel.publish(move)
 
+#Initialize the car finder
+#car_finder = car_finder.CarFinder()
+
+#print("hello there")
+
 #Subscribe to camera
-sub_image = rospy.Subscriber("/rrbot/camera1/image_raw", Image, observer)
+sub_image = rospy.Subscriber("/rrbot/camera1/image_raw", Image, driver)
 
 #Bridge ros and opencv
 bridge = CvBridge()
+
+
+#print("hello there2")
 
 #Stops driver node from dying
 rospy.spin()
