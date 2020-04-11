@@ -1,18 +1,27 @@
 #! /usr/bin/env python
 
 # ENPH 353 final project: Self-driving vehicle with license-plate reading
+# driver.py: script which handles the vehicle driving
 # Authors:
 #   Miles Justice
 #   David Widjaja 18950063
 
 import random
-import rospy
+import time
+import sys
+
 import cv2 as cv
 import numpy as np
-import time
+
+#ROS-specific libraries
+import rospy
 from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
 from geometry_msgs.msg import Twist
+
+#local modules
+import sift_based_car_finder
+#import hough_based_car_finder
 
 #Robot Camera Parameters
 IMG_WIDTH = 640
@@ -40,6 +49,11 @@ LEFT_THRESH_P = 1
 RIGHT_THRESH_P = 1
 MID_THRESH_P = 1
 
+#Color codes
+BLUE = 0
+GREEN = 1
+YELLOW = 2
+
 #Color Filters
 RED_LOW = np.array([0,0,200])
 RED_HIGH = np.array([0,0,255])
@@ -47,6 +61,10 @@ YG_LOW = np.array([0,0,0])
 YG_HIGH = np.array([40,150,150])
 BLUE_LOW = np.array([0,0,0])
 BLUE_HIGH = np.array([240,40,40])
+
+#Color Thresholds
+YG_THRESHOLD = 3000000
+BLUE_THRESHOLD = 5500000
 
 #Codes
 IDK = -1
@@ -176,6 +194,25 @@ def determine_motion(edge_points):
     #   F           T           T      the forward road is blocked
    
     return (forward, left, right)
+
+#Check if a particular frame convincingly has a car in it
+# img: a bgr image
+# returns True or False 
+def check_for_car(img):
+
+    yg_mask = cv.inRange(img, YG_LOW, YG_HIGH)
+    blue_mask = cv.inRange(img, BLUE_LOW, BLUE_HIGH)
+
+    yg_sum = yg_mask.sum()
+    blue_sum = blue_mask.sum()
+
+    #TESTING
+    #print("yg_sum: {} blue_sum: {}".format(yg_sum, blue_sum))
+
+    if yg_sum > YG_THRESHOLD or blue_sum > BLUE_THRESHOLD:
+        return True
+    else:
+        return False
 
 #Controls the model vehicle
 # data: raw ROS image file
@@ -349,6 +386,7 @@ def driver(data):
                 evaluation_lock = -1
 
     #If the vehicle should move forward, apply PID on the edges of the line
+    #Also actively search the left and right for cars
     if movement == FWD:
          
         #sum the thresholded image to reduce random error
@@ -537,47 +575,29 @@ def driver(data):
 #Function to test various aspects of the vehicle without controlling it
 # data: raw ROS image file
 def observer(data):
-
+    
     global lock_movement
     global movement
-
+    
     #Obtain and crop the original image
     cv_img = bridge.imgmsg_to_cv2(data, "bgr8")
     cv_img_upper = cv_img
     cv_img = cv_img[-IMG_HEIGHT:, :, :]
-
+    
     #grayscale, filter and threshold the original image
-    #cv_img_gray = cv.cvtColor(cv_img_upper, cv.COLOR_BGR2GRAY)
+    cv_img_gray = cv.cvtColor(cv_img_upper, cv.COLOR_BGR2GRAY)
     #kernel = np.ones((5,5), np.float32)/25
     #cv_img_gray = cv.filter2D(cv_img_gray,-1,kernel)
     #retval, cv_img_binary = cv.threshold(cv_img_gray, BINARY_THRESH, 255, cv.THRESH_BINARY)
+   
+    cv_img_side = cv_img_upper[:, 0:200, :]
+    #cv_img_side = cv_img_upper[:, -200:, :]
 
-    #add a red filter
-    cv_redmask = cv.inRange(cv_img_upper, RED_LOW, RED_HIGH)
-    
-    #add a yellow-green filter
-    #cv_yellowgreenmask = cv.inRange(cv_img_upper, np.array([0,0,0]), np.array([40,150,150]))
-    
-    #add a blue filter. This one is ok so far.
-    #cv_bluemask = cv.inRange(cv_img_upper, np.array([0,0,0]), np.array([240,40,40]))
-    
-    #initialize a blank image
-    #blank_image = np.zeros((IMG_HEIGHT, IMG_WIDTH, 3), np.uint8)
+    check_for_car(cv_img_side)
 
-    #Obtain edges to determine current position on board
-    #edge_points, blank_image = edge_detector_p(cv_img_binary, blank_image)
-
-    #Obtain possible movements
-    #forward, left, right = determine_motion(edge_points)
-
-    #print("f: {} l: {} r: {} mid: {} fwd: {} left: {} right: {}".format(\
-    #    edge_points[0], edge_points[1], edge_points[2], edge_points[3], \
-    #    forward, left, right))
-
-    print("RED: {}".format(cv_redmask.sum()))
-
-    cv.imshow("img", cv_img_upper)
+    cv.imshow("right_side", cv_img_side)
     cv.waitKey(1)
+
 
 #Initialize the node
 rospy.init_node('driver')
@@ -585,6 +605,12 @@ rospy.loginfo('driver node started')
 
 #Publish a movement topic
 pub_vel = rospy.Publisher('/cmd_vel', Twist, queue_size = 1)
+
+#Initialize sift-based car finder
+car_finder = sift_based_car_finder.SIFTBasedCarFinder()
+
+#Initialize edge-based car finder
+#car_finder = hough_based_car_finder.EdgeBasedCarFinder()
 
 #Delay for observation purposes
 rospy.sleep(10)
@@ -610,7 +636,7 @@ move.angular.z = 0.0
 pub_vel.publish(move)
 
 #Subscribe to camera
-sub_image = rospy.Subscriber("/rrbot/camera1/image_raw", Image, driver)
+sub_image = rospy.Subscriber("/rrbot/camera1/image_raw", Image, observer)
 
 #Bridge ros and opencv
 bridge = CvBridge()
