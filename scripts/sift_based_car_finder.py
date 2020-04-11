@@ -1,7 +1,7 @@
 #! /usr/bin/env python
 
 # ENPH 353 final project: Self-driving vehicle with license-plate reading
-# car_finder.py: script which handles the finding of cars and extracting license plate
+# sift_based_car_finder.py: script which handles the finding of cars and extracting license plate
 #                images from said cars.
 # Authors:
 #   Miles Justice
@@ -14,19 +14,25 @@ import sys
 import cv2 as cv
 import numpy as np
 
-FILTER_MATCH_THRESHOLD = 0.6
-HOMOGRAPHY_THRESHOLD = 5
+#0.8 is too high
+#0.6 is too high
+#0.5 is okay
+#0.45 is too low
+#0.4 is too low
+FILTER_MATCH_THRESHOLD = 0.5
 
-class CarFinder:
+#5 is too low
+HOMOGRAPHY_THRESHOLD = 10
+
+class SIFTBasedCarFinder:
 
     def __init__(self):
         
         path = os.path.dirname(os.path.realpath(__file__)) + "/"
 
-        #TODO: Obtain suitable target image
-        self.source_img = cv.imread(path+"target_image_1.jpg", cv.IMREAD_GRAYSCALE)
-        cv.imshow('target', self.source_img)
-        cv.waitKey(1)
+        #Obtain suitable target image
+        self.source_img = cv.imread(path+"target_image_1_v3.jpg")
+        self.source_img = cv.cvtColor(self.source_img, cv.COLOR_BGR2GRAY)
         self.h, self.w = self.source_img.shape
         
         #instantiate the sift class, and uses sift to get the keypoints and descriptors of source
@@ -37,13 +43,9 @@ class CarFinder:
         self.index_params = dict(algorithm=0, trees=5)
         self.search_params = dict()
         self.flann = cv.FlannBasedMatcher(self.index_params, self.search_params)
-        
-        print("car finder initialized")
 
     def match_car(self, target_gray):
         
-        print("matching car")
-
         #use sift to get keypoints and descriptors in the frame 
         kp_target, desc_target = self.sift.detectAndCompute(target_gray, None)
 
@@ -59,10 +61,9 @@ class CarFinder:
                 good_pts.append(m)
    
         #draw the found matches of keypoints from two images 
-        output_matches = cv.drawMatches(self.source_gray, kp_image, target_gray, kp_target, \
+        output_matches = cv.drawMatches(self.source_img, self.kp_source, target_gray, kp_target, \
                                      good_pts, target_gray)
-        cv.imshow("output", output_matches) 
-    
+
 	    #Homography
         if len(good_pts) > HOMOGRAPHY_THRESHOLD:
             #if there are this many points, draw homography
@@ -80,7 +81,7 @@ class CarFinder:
 
             #if no homography can be found, keep going
             if matrix is None:
-                cv.imshow("Homography", target_gray)
+                return (target_gray, output_matches)
  
             else:
                 #do a perspective transform to change the orientation of the homography
@@ -88,14 +89,14 @@ class CarFinder:
                 pts = np.float32([[0, 0], [0, self.h], [self.w, self.h], \
                                  [self.w, 0]]).reshape(-1,1,2)
                 dst = cv.perspectiveTransform(pts, matrix)            
-
+                
+                print("Good Points: {}".format(len(good_pts)))
                 #draw the homography and show it 
                 homography = cv.polylines(target_gray, [np.int32(dst)], True, (255, 0, 0), 3)
-                cv.imshow("Homography", homography)
+                
+                return (homography, output_matches)
 
         else:
-            cv.imshow("Homography", target_gray)
-
-        cv.waitKey(1)
+            return (target_gray, output_matches)
 
 

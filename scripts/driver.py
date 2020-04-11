@@ -19,13 +19,8 @@ from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
 from geometry_msgs.msg import Twist
 
-#local functions
-#import car_finder
-
-#print("using rospy version: {}".format(rospy.__version__))
-#print("using Image version: {}".format(Image.__version))
-#print("using CvBridge version: {}".format(CvBridge.__version__))
-#print("using Twist version: {}".format(Twist.__version))
+#local modules
+import sift_based_car_finder
 
 #Robot Camera Parameters
 IMG_WIDTH = 640
@@ -550,50 +545,27 @@ def driver(data):
 #Function to test various aspects of the vehicle without controlling it
 # data: raw ROS image file
 def observer(data):
-
+    
     global lock_movement
     global movement
-
-    print("observing")
+    
     #Obtain and crop the original image
     cv_img = bridge.imgmsg_to_cv2(data, "bgr8")
     cv_img_upper = cv_img
     cv_img = cv_img[-IMG_HEIGHT:, :, :]
-
+    
     #grayscale, filter and threshold the original image
     cv_img_gray = cv.cvtColor(cv_img_upper, cv.COLOR_BGR2GRAY)
     #kernel = np.ones((5,5), np.float32)/25
     #cv_img_gray = cv.filter2D(cv_img_gray,-1,kernel)
     #retval, cv_img_binary = cv.threshold(cv_img_gray, BINARY_THRESH, 255, cv.THRESH_BINARY)
+   
+    homography, output_matches = car_finder.match_car(cv_img_gray)
 
-    #add a red filter
-    #cv_redmask = cv.inRange(cv_img_upper, RED_LOW, RED_HIGH)
-    
-    #add a yellow-green filter
-    #cv_yellowgreenmask = cv.inRange(cv_img_upper, np.array([0,0,0]), np.array([40,150,150]))
-    
-    #add a blue filter. This one is ok so far.
-    #cv_bluemask = cv.inRange(cv_img_upper, np.array([0,0,0]), np.array([240,40,40]))
-    
-    #initialize a blank image
-    #blank_image = np.zeros((IMG_HEIGHT, IMG_WIDTH, 3), np.uint8)
-
-    #Obtain edges to determine current position on board
-    #edge_points, blank_image = edge_detector_p(cv_img_binary, blank_image)
-
-    #Obtain possible movements
-    #forward, left, right = determine_motion(edge_points)
-
-    #print("f: {} l: {} r: {} mid: {} fwd: {} left: {} right: {}".format(\
-    #    edge_points[0], edge_points[1], edge_points[2], edge_points[3], \
-    #    forward, left, right))
-
-    #print("RED: {}".format(cv_redmask.sum()))
-    
-    car_finder.match_car(cv_img_gray)
-
-    cv.imshow("img", cv_img_gray)
+    cv.imshow('homography', homography)
     cv.waitKey(1)
+    cv.imshow('output_matches', output_matches)
+    cv.waitKey(1)    
 
 #Initialize the node
 rospy.init_node('driver')
@@ -601,6 +573,9 @@ rospy.loginfo('driver node started')
 
 #Publish a movement topic
 pub_vel = rospy.Publisher('/cmd_vel', Twist, queue_size = 1)
+
+#Initialize sift-based
+car_finder = sift_based_car_finder.SIFTBasedCarFinder()
 
 #Delay for observation purposes
 rospy.sleep(10)
@@ -625,19 +600,11 @@ move.angular.y = 0.0
 move.angular.z = 0.0
 pub_vel.publish(move)
 
-#Initialize the car finder
-#car_finder = car_finder.CarFinder()
-
-#print("hello there")
-
 #Subscribe to camera
-sub_image = rospy.Subscriber("/rrbot/camera1/image_raw", Image, driver)
+sub_image = rospy.Subscriber("/rrbot/camera1/image_raw", Image, observer)
 
 #Bridge ros and opencv
 bridge = CvBridge()
-
-
-#print("hello there2")
 
 #Stops driver node from dying
 rospy.spin()
