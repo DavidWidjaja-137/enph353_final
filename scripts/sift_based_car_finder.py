@@ -22,7 +22,8 @@ import numpy as np
 FILTER_MATCH_THRESHOLD = 0.5
 
 #5 is too low
-HOMOGRAPHY_THRESHOLD = 10
+#10 is still pretty bad
+HOMOGRAPHY_THRESHOLD = 3
 
 class SIFTBasedCarFinder:
 
@@ -31,7 +32,7 @@ class SIFTBasedCarFinder:
         path = os.path.dirname(os.path.realpath(__file__)) + "/"
 
         #Obtain suitable target image
-        self.source_img = cv.imread(path+"target_image_1_v3.jpg")
+        self.source_img = cv.imread(path+"target_image_1_v6.jpg")
         self.source_img = cv.cvtColor(self.source_img, cv.COLOR_BGR2GRAY)
         self.h, self.w = self.source_img.shape
         
