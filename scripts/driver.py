@@ -49,6 +49,11 @@ LEFT_THRESH_P = 1
 RIGHT_THRESH_P = 1
 MID_THRESH_P = 1
 
+#Color codes
+BLUE = 0
+GREEN = 1
+YELLOW = 2
+
 #Color Filters
 RED_LOW = np.array([0,0,200])
 RED_HIGH = np.array([0,0,255])
@@ -56,6 +61,10 @@ YG_LOW = np.array([0,0,0])
 YG_HIGH = np.array([40,150,150])
 BLUE_LOW = np.array([0,0,0])
 BLUE_HIGH = np.array([240,40,40])
+
+#Color Thresholds
+YG_THRESHOLD = 3000000
+BLUE_THRESHOLD = 5500000
 
 #Codes
 IDK = -1
@@ -185,6 +194,25 @@ def determine_motion(edge_points):
     #   F           T           T      the forward road is blocked
    
     return (forward, left, right)
+
+#Check if a particular frame convincingly has a car in it
+# img: a bgr image
+# returns True or False 
+def check_for_car(img):
+
+    yg_mask = cv.inRange(img, YG_LOW, YG_HIGH)
+    blue_mask = cv.inRange(img, BLUE_LOW, BLUE_HIGH)
+
+    yg_sum = yg_mask.sum()
+    blue_sum = blue_mask.sum()
+
+    #TESTING
+    #print("yg_sum: {} blue_sum: {}".format(yg_sum, blue_sum))
+
+    if yg_sum > YG_THRESHOLD or blue_sum > BLUE_THRESHOLD:
+        return True
+    else:
+        return False
 
 #Controls the model vehicle
 # data: raw ROS image file
@@ -358,6 +386,7 @@ def driver(data):
                 evaluation_lock = -1
 
     #If the vehicle should move forward, apply PID on the edges of the line
+    #Also actively search the left and right for cars
     if movement == FWD:
          
         #sum the thresholded image to reduce random error
@@ -561,27 +590,14 @@ def observer(data):
     #cv_img_gray = cv.filter2D(cv_img_gray,-1,kernel)
     #retval, cv_img_binary = cv.threshold(cv_img_gray, BINARY_THRESH, 255, cv.THRESH_BINARY)
    
-    homography, output_matches = car_finder.match_car(cv_img_gray)
+    cv_img_side = cv_img_upper[:, 0:200, :]
+    #cv_img_side = cv_img_upper[:, -200:, :]
 
-    cv.imshow('homography', homography)
+    check_for_car(cv_img_side)
+
+    cv.imshow("right_side", cv_img_side)
     cv.waitKey(1)
-    cv.imshow('output_matches', output_matches)
-    cv.waitKey(1)    
 
-    #yg_mask = cv.inRange(cv_img, YG_LOW, YG_HIGH)
-
-    #retval, cv_img_binary = cv.threshold(cv_img_gray, 50, 255, cv.THRESH_BINARY_INV)
-
-    #line_pts = car_finder.match_car(cv_img_binary)
-    
-    #for line in line_pts:
-    #    cv.line(cv_img_upper, (line[0], line[1]), (line[2], line[3]), (0,0,255), 2)
-
-    #cv.imshow('edged images', cv_img_upper)
-    #cv.waitKey(1)
-    #cv.imshow('binary', cv_img_binary)
-    #cv.waitKey(1)
- 
 
 #Initialize the node
 rospy.init_node('driver')

@@ -29,8 +29,18 @@ FILTER_MATCH_THRESHOLD_YELLOW = 0.7
 HOMOGRAPHY_THRESHOLD = 3
 HOMOGRAPHY_THRESHOLD_YELLOW = 1
 
+#Color codes
+BLUE = 0
+GREEN = 1
+YELLOW = 2
+
+#Homography Thresholds
+HOM_LOW = 50
+HOM_HIGH = 150
+
 class SIFTBasedCarFinder:
 
+    #instantiate the SIFTBasedCarFinder class
     def __init__(self):
         
         path = os.path.dirname(os.path.realpath(__file__)) + "/"
@@ -40,9 +50,9 @@ class SIFTBasedCarFinder:
         self.source_blue = cv.imread(path+"blue_v0.jpg")
         self.source_yellow = cv.imread(path+"yellow_v2.jpg")
          
-        self.source_green = cv.cvtColor(self.source_img, cv.COLOR_BGR2GRAY)
-        self.source_blue = cv.imread(self.source_img, cv.COLOR_BGR2GRAY)
-        self.source_yellow = cv.imread(self.source_img, cv.COLOR_BGR2GRAY)
+        self.source_green = cv.cvtColor(self.source_green, cv.COLOR_BGR2GRAY)
+        self.source_blue = cv.cvtColor(self.source_blue, cv.COLOR_BGR2GRAY)
+        self.source_yellow = cv.cvtColor(self.source_yellow, cv.COLOR_BGR2GRAY)
         self.h_g, self.w_g = self.source_green.shape
         self.h_b, self.w_b = self.source_blue.shape
         self.h_y, self.w_y = self.source_yellow.shape
@@ -57,15 +67,22 @@ class SIFTBasedCarFinder:
         self.index_params = dict(algorithm=0, trees=5)
         self.search_params = dict()
         self.flann = cv.FlannBasedMatcher(self.index_params, self.search_params)
-        
+       
+    #Use the SIFT algorithm to check if a valid license plate is available at the particular
+    # location. This algorithm is computationally intensive, so run it sparingly. Other
+    # preliminary methods should first be used to check if a license plate may be available at
+    # a location.
+    # returns: ( (x0, y0), (x1, y1) )
+    # x0, y0 represent the top-left corner of the homography
+    # x1, y1 represent the bottom-right corner of the homography
     def match_car(self, target_gray, colour):
-
+        
         if colour == GREEN:
             self.source = self.source_green
             self.h = self.h_g
             self.w = self.w_g
             self.kp_source = self.kp_source_g
-            self.kp_source = self.desc_source_g
+            self.desc_source = self.desc_source_g
             homography_threshold = HOMOGRAPHY_THRESHOLD
             filter_match_threshold = FILTER_MATCH_THRESHOLD
         elif colour == BLUE:
@@ -73,7 +90,7 @@ class SIFTBasedCarFinder:
             self.h = self.h_b
             self.w = self.w_b
             self.kp_source = self.kp_source_b
-            self.kp_source = self.desc_source_b
+            self.desc_source = self.desc_source_b
             homography_threshold = HOMOGRAPHY_THRESHOLD
             filter_match_threshold = FILTER_MATCH_THRESHOLD
         else:
@@ -81,10 +98,10 @@ class SIFTBasedCarFinder:
             self.h = self.h_y
             self.w = self.w_y
             self.kp_source = self.kp_source_y
-            self.kp_source = self.desc_source_y
+            self.desc_source = self.desc_source_y
             homography_threshold = HOMOGRAPHY_THRESHOLD_YELLOW
             filter_match_threshold = FILTER_MATCH_THRESHOLD_YELLOW
- 
+         
         #use sift to get keypoints and descriptors in the frame 
         kp_target, desc_target = self.sift.detectAndCompute(target_gray, None)
          
@@ -106,7 +123,7 @@ class SIFTBasedCarFinder:
 	    #Homography
         if len(good_pts) > homography_threshold:
             #if there are this many points, draw homography
-        
+             
             #query index gives position of the points in the query image
             #this extracts those points and reshapes it
             query_pts = np.float32([self.kp_source[m.queryIdx].pt \
@@ -121,33 +138,55 @@ class SIFTBasedCarFinder:
             #if no homography can be found
             if matrix is None:
 
-                if colour == YELLOW:
-                    return good_pts
-                else:
-                    return None
-
+                return None
+                #TESTING
                 #return (target_gray, output_matches)
-         
+ 
             else:
                 #do a perspective transform to change the orientation of the homography
                 # with respect to the original image
                 pts = np.float32([[0, 0], [0, self.h], [self.w, self.h], \
                                  [self.w, 0]]).reshape(-1,1,2)
                 dst = cv.perspectiveTransform(pts, matrix)            
+                dst = np.int32(dst) 
+
+                #Find the maximum and minimum x and y points
+                max_x = dst[0][0][0]
+                min_x = dst[0][0][0]
                 
-                #draw the homography and show it 
-                #homography = cv.polylines(target_gray, [np.int32(dst)], True, (255, 0, 0), 3)
+                max_y = dst[0][0][1]
+                min_y = dst[0][0][1]
+                
+                for i in range(len(dst)):
+                    
+                    if max_x < dst[i][0][0]:
+                        max_x = dst[i][0][0]
+                    if min_x > dst[i][0][0]:
+                        min_x = dst[i][0][0]
 
-                #return (homography, output_matches)
+                    if max_y < dst[i][0][1]:
+                        max_y = dst[i][0][1]
+                    if min_y > dst[i][0][1]:
+                        min_y = dst[i][0][1]
 
-                return dst
-
+                if max_x - min_x < HOM_LOW or max_x - min_x > HOM_HIGH:
+                    return None
+                    #TESTING
+                    #return (target_gray, output_matches)
+                elif max_y - min_y < HOM_LOW or max_y - min_y > HOM_HIGH:
+                    return None
+                    #TESTING
+                    #return (target_gray, output_matches)
+                else:
+                    return ((min_x, min_y), (max_x, max_y)) 
+                    #TESTING
+                    #dst = [dst]
+                    #draw the homography and show it 
+                    #homography = cv.polylines(target_gray, [np.int32(dst)], True, (255, 0, 0), 3)
+                    #return (homography, output_matches)
         else:
 
-            if colour == YELLOW:
-                return good_pts
-            else:
-                return None
-
+            return None
+            #TESTING
             #return (target_gray, output_matches)
 
