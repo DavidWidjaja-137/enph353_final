@@ -21,6 +21,7 @@ from geometry_msgs.msg import Twist
 
 #local modules
 import sift_based_car_finder
+#import hough_based_car_finder
 
 #Robot Camera Parameters
 IMG_WIDTH = 640
@@ -567,6 +568,21 @@ def observer(data):
     cv.imshow('output_matches', output_matches)
     cv.waitKey(1)    
 
+    #yg_mask = cv.inRange(cv_img, YG_LOW, YG_HIGH)
+
+    #retval, cv_img_binary = cv.threshold(cv_img_gray, 50, 255, cv.THRESH_BINARY_INV)
+
+    #line_pts = car_finder.match_car(cv_img_binary)
+    
+    #for line in line_pts:
+    #    cv.line(cv_img_upper, (line[0], line[1]), (line[2], line[3]), (0,0,255), 2)
+
+    #cv.imshow('edged images', cv_img_upper)
+    #cv.waitKey(1)
+    #cv.imshow('binary', cv_img_binary)
+    #cv.waitKey(1)
+ 
+
 #Initialize the node
 rospy.init_node('driver')
 rospy.loginfo('driver node started')
@@ -574,8 +590,11 @@ rospy.loginfo('driver node started')
 #Publish a movement topic
 pub_vel = rospy.Publisher('/cmd_vel', Twist, queue_size = 1)
 
-#Initialize sift-based
+#Initialize sift-based car finder
 car_finder = sift_based_car_finder.SIFTBasedCarFinder()
+
+#Initialize edge-based car finder
+#car_finder = hough_based_car_finder.EdgeBasedCarFinder()
 
 #Delay for observation purposes
 rospy.sleep(10)

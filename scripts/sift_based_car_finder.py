@@ -20,70 +20,114 @@ import numpy as np
 #0.45 is too low
 #0.4 is too low
 FILTER_MATCH_THRESHOLD = 0.5
+#0.8 too high for yellow
+#0.7 is okay-ish
+#0.5 too low for yellow
+FILTER_MATCH_THRESHOLD_YELLOW = 0.7
 
-#5 is too low
-#10 is still pretty bad
+#yellow is weak af
 HOMOGRAPHY_THRESHOLD = 3
+HOMOGRAPHY_THRESHOLD_YELLOW = 1
 
 class SIFTBasedCarFinder:
 
     def __init__(self):
         
         path = os.path.dirname(os.path.realpath(__file__)) + "/"
-
-        #Obtain suitable target image
-        self.source_img = cv.imread(path+"target_image_1_v6.jpg")
-        self.source_img = cv.cvtColor(self.source_img, cv.COLOR_BGR2GRAY)
-        self.h, self.w = self.source_img.shape
+        
+        #Obtain suitable target images
+        self.source_green = cv.imread(path+"green_v0.jpg")
+        self.source_blue = cv.imread(path+"blue_v0.jpg")
+        self.source_yellow = cv.imread(path+"yellow_v2.jpg")
+         
+        self.source_green = cv.cvtColor(self.source_img, cv.COLOR_BGR2GRAY)
+        self.source_blue = cv.imread(self.source_img, cv.COLOR_BGR2GRAY)
+        self.source_yellow = cv.imread(self.source_img, cv.COLOR_BGR2GRAY)
+        self.h_g, self.w_g = self.source_green.shape
+        self.h_b, self.w_b = self.source_blue.shape
+        self.h_y, self.w_y = self.source_yellow.shape
         
         #instantiate the sift class, and uses sift to get the keypoints and descriptors of source
         self.sift = cv.xfeatures2d.SIFT_create()
-        self.kp_source, self.desc_source = self.sift.detectAndCompute(self.source_img, None)
+        self.kp_source_g, self.desc_source_g = self.sift.detectAndCompute(self.source_green, None)
+        self.kp_source_b, self.desc_source_b = self.sift.detectAndCompute(self.source_blue, None)
+        self.kp_source_y, self.desc_source_y = self.sift.detectAndCompute(self.source_yellow, None)
         
         #instantiate the image matcher, which uses the flann algorithm
         self.index_params = dict(algorithm=0, trees=5)
         self.search_params = dict()
         self.flann = cv.FlannBasedMatcher(self.index_params, self.search_params)
-
-    def match_car(self, target_gray):
         
+    def match_car(self, target_gray, colour):
+
+        if colour == GREEN:
+            self.source = self.source_green
+            self.h = self.h_g
+            self.w = self.w_g
+            self.kp_source = self.kp_source_g
+            self.kp_source = self.desc_source_g
+            homography_threshold = HOMOGRAPHY_THRESHOLD
+            filter_match_threshold = FILTER_MATCH_THRESHOLD
+        elif colour == BLUE:
+            self.source = self.source_blue
+            self.h = self.h_b
+            self.w = self.w_b
+            self.kp_source = self.kp_source_b
+            self.kp_source = self.desc_source_b
+            homography_threshold = HOMOGRAPHY_THRESHOLD
+            filter_match_threshold = FILTER_MATCH_THRESHOLD
+        else:
+            self.source = self.source_yellow
+            self.h = self.h_y
+            self.w = self.w_y
+            self.kp_source = self.kp_source_y
+            self.kp_source = self.desc_source_y
+            homography_threshold = HOMOGRAPHY_THRESHOLD_YELLOW
+            filter_match_threshold = FILTER_MATCH_THRESHOLD_YELLOW
+ 
         #use sift to get keypoints and descriptors in the frame 
         kp_target, desc_target = self.sift.detectAndCompute(target_gray, None)
-
+         
         #match the descriptors of the target and the descriptors of the frame
         #matches is a list of matching points in the target and descriptor.
         matches = self.flann.knnMatch(self.desc_source, desc_target, k=2) 
-
+        
         #filter only for good matches
         #this is done by cutting out points with abnormally large distances    
         good_pts = []
         for m, n in matches:
-            if m.distance < FILTER_MATCH_THRESHOLD*n.distance:
+            if m.distance < filter_match_threshold*n.distance:
                 good_pts.append(m)
-   
+         
         #draw the found matches of keypoints from two images 
-        output_matches = cv.drawMatches(self.source_img, self.kp_source, target_gray, kp_target, \
-                                     good_pts, target_gray)
-
+        #output_matches = cv.drawMatches(self.source_img, self.kp_source, target_gray, kp_target, \
+        #                             good_pts, target_gray)
+        
 	    #Homography
-        if len(good_pts) > HOMOGRAPHY_THRESHOLD:
+        if len(good_pts) > homography_threshold:
             #if there are this many points, draw homography
-
+        
             #query index gives position of the points in the query image
             #this extracts those points and reshapes it
             query_pts = np.float32([self.kp_source[m.queryIdx].pt \
                                                  for m in good_pts]).reshape(-1,1,2)        
-
+        
             train_pts = np.float32([kp_target[m.trainIdx].pt \
                                                  for m in good_pts]).reshape(-1,1,2)
-
+        
             #obtains the perspective transformation between two sets of points 
             matrix, mask = cv.findHomography(query_pts, train_pts, cv.RANSAC, 5.0)
-
-            #if no homography can be found, keep going
+        
+            #if no homography can be found
             if matrix is None:
-                return (target_gray, output_matches)
- 
+
+                if colour == YELLOW:
+                    return good_pts
+                else:
+                    return None
+
+                #return (target_gray, output_matches)
+         
             else:
                 #do a perspective transform to change the orientation of the homography
                 # with respect to the original image
@@ -91,13 +135,19 @@ class SIFTBasedCarFinder:
                                  [self.w, 0]]).reshape(-1,1,2)
                 dst = cv.perspectiveTransform(pts, matrix)            
                 
-                print("Good Points: {}".format(len(good_pts)))
                 #draw the homography and show it 
-                homography = cv.polylines(target_gray, [np.int32(dst)], True, (255, 0, 0), 3)
-                
-                return (homography, output_matches)
+                #homography = cv.polylines(target_gray, [np.int32(dst)], True, (255, 0, 0), 3)
+
+                #return (homography, output_matches)
+
+                return dst
 
         else:
-            return (target_gray, output_matches)
 
+            if colour == YELLOW:
+                return good_pts
+            else:
+                return None
+
+            #return (target_gray, output_matches)
 
