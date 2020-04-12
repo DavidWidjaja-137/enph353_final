@@ -285,13 +285,13 @@ def driver(data):
             print("F")
              
         elif forward == True and left == True and right == True:
-            # Open a decision to turn left, right or continue forwards
+            # Open a decision to turn left, right, or go back
             movement = RIGHT 
             print("Left, Right, Forward Positions Available")
             print("Begin RIGHT movement")
              
         elif forward == True and left == True and right == False:
-            # Open a decision to turn left or continue forwards
+            # Open a decision to turn left or continue forwards, or go back.
             movement = LEFT
             print("Left, Forward Positions Available")
             print("Begin LEFT movement")
@@ -597,7 +597,6 @@ def observer(data):
 
     cv.imshow("right_side", cv_img_side)
     cv.waitKey(1)
-
 
 #Initialize the node
 rospy.init_node('driver')
