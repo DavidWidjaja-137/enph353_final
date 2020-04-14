@@ -64,7 +64,8 @@ BLUE_HIGH = np.array([240,40,40])
 
 #Color Thresholds
 YG_THRESHOLD = 3000000
-BLUE_THRESHOLD = 5500000
+BLUE_THRESHOLD = 4500000
+#BLUE_THRESHOLD = 5500000
 
 # Movement Codes
 IDK = -1
@@ -87,9 +88,10 @@ evaluation_lock = -1
 fwd_total = 0
 idk_total = 0
 mid_total = 0
-movement = FWD
+movement = FWD_LOOK_RIGHT
 move = Twist()
 n_turns = 0
+car_found = False
 
 turn_thresh = [20, 15, 20, 18]
 
@@ -238,6 +240,7 @@ def driver(data):
     global movement
     global n_turns
     global move
+    global car_found
 
     #Obtain and crop the raw image
     cv_img_raw = bridge.imgmsg_to_cv2(data, "bgr8")
@@ -322,7 +325,7 @@ def driver(data):
 
             #Use the fsm for navigation
             navigator.update_state()
-            navigator.lock_state()
+            navigator.lock_current_state()
             movement = navigator.get_current_behavior()
 
             #TESTING
@@ -337,7 +340,7 @@ def driver(data):
 
             #Use the fsm for navigation
             navigator.update_state()
-            navigator.lock_state()
+            navigator.lock_current_state()
             movement = navigator.get_current_behavior()
 
             #TESTING
@@ -352,7 +355,7 @@ def driver(data):
 
             #Use the fsm for navigation
             navigator.update_state()
-            navigator.lock_state()
+            navigator.lock_current_state()
             movement = navigator.get_current_behavior()
 
             #TESTING
@@ -388,7 +391,7 @@ def driver(data):
 
                 #Use the fsm for navigation
                 navigator.update_state()
-                navigator.lock_state()
+                navigator.lock_current_state()
                 movement = navigator.get_current_behavior()
                
                 #TESTING 
@@ -402,7 +405,7 @@ def driver(data):
 
                 #Use the fsm for navigation
                 navigator.update_state()
-                navigator.lock_state()
+                navigator.lock_current_state()
                 movement = navigator.get_current_behavior()
        
                 #TESTING 
@@ -505,6 +508,9 @@ def driver(data):
 
         #Note: A car moving forward will either encounter a turn, a car or a crosswalk
         # If it is a crosswalk, then a new flag system must be devised to handle it
+
+        #TESTING
+        #print("executing PID")
          
         #sum the thresholded image to reduce random error
         row = []
@@ -580,25 +586,31 @@ def driver(data):
         if movement == FWD_LOOK_LEFT:
 
             check_img = cv_img_raw[:, 0:200, :]
-
-        elif movement == FWD_LOOK_RIGHT:
             
-            check_img = cv_img_raw[:
+            #TESTING
+            cv.imshow("check_img", check_img)
+            cv.waitKey(1)
 
-            if check_for_car(check_img) is True:
+            if check_for_car(check_img) is True and car_found == False:
+
+                print("A car was detected on the left")
+
+                #TESTING
+                cv.imshow("car detected here", check_img)
+                cv.waitKey(1)
 
                 #This means that the vehicle is in a position to read for a car
                 navigator.update_state()
                 navigator.lock_current_state()
 
                 #Apply SIFT to extract a sub-image from the main image
-                check_img_gray = cv.cvtColor(check_img, BGR2GRAY)
+                check_img_gray = cv.cvtColor(check_img, cv.COLOR_BGR2GRAY)
                 img_colour = navigator.get_car_colour()
-                edges = car_matcher.match_car(check_img_gray, img_color)
+                edges = car_finder.match_car(check_img_gray, img_colour)
 
                 if edges is not None:
 
-                    cropped_image = check_img[edges[0][0]:edges[1][0], edges[0][1]:edges[1][1], :]
+                    cropped_image = check_img[edges[0][1]:edges[1][1], edges[0][0]:edges[1][0], :]
     
                     #TESTING
                     cv.imshow("SIFT output", cropped_image)
@@ -613,25 +625,44 @@ def driver(data):
                 #TODO: Check that the output of the NN is satisfactory before moving on
                 #       Otherwise, repeat the steps above
                 navigator.unlock_current_state()
+
+                #Note: Now that a car was found, the same car should not be found again
+                #      This flag will prevent the same car from being observed twice.
+                car_found = True
+
+            else:
+                
+                #If no car was found, that means that the old car is gone
+                car_found = False
                 
         elif movement == FWD_LOOK_RIGHT:
 
             check_img = cv_img_raw[:, -200:, :]
 
-            if check_for_car(check_img) is True:
+            #TESTING
+            cv.imshow("check_img", check_img)
+            cv.waitKey(1)
+
+            if check_for_car(check_img) is True and car_found == False:
+
+                print("A car was detected on the right")
+
+                #TESTING
+                cv.imshow("car detected here", check_img)
+                cv.waitKey(1)
 
                 #This means that the vehicle is in a position to read for a car
                 navigator.update_state()
                 navigator.lock_current_state()
 
                 #Apply SIFT to extract a sub-image from the main image
-                check_img_gray = cv.cvtColor(check_img, BGR2GRAY)
+                check_img_gray = cv.cvtColor(check_img, cv.COLOR_BGR2GRAY)
                 img_colour = navigator.get_car_colour()
-                edges = car_matcher.match_car(check_img_gray, img_color)
+                edges = car_finder.match_car(check_img_gray, img_colour)
 
                 if edges is not None:
 
-                    cropped_image = check_img[edges[0][0]:edges[1][0], edges[0][1]:edges[1][1], :]
+                    cropped_image = check_img[edges[0][1]:edges[1][1], edges[0][0]:edges[1][0], :]
     
                     #TESTING
                     cv.imshow("SIFT output", cropped_image)
@@ -647,6 +678,15 @@ def driver(data):
                 #TODO: Check that the output of the NN is satisfactory before moving on
                 #        Otherwise, repeat the steps above
                 navigator.unlock_current_state()
+
+                #Note: Now that a car was found, the same car should not be found again
+                #      This flag will prevent the same car from being observed twice.
+                car_found = True
+
+            else:
+
+                #If no car was found, that means that the old car is gone
+                car_found = False
 
         elif movement == FWD_LOOK_CROSS:
 
@@ -758,9 +798,10 @@ def driver(data):
     elif movement == TURN_AROUND:
 
         #TODO: figure out how to turn around
+        
+        #TESTING
+        print("Supposed to turn around here")
     
-        pass
-
     #Vehicle is in an unknown position; Stop the vehicle
     elif movement == IDK:
 
@@ -864,7 +905,7 @@ move.angular.z = 0.0
 pub_vel.publish(move)
 
 #Subscribe to camera
-sub_image = rospy.Subscriber("/rrbot/camera1/image_raw", Image, observer)
+sub_image = rospy.Subscriber("/rrbot/camera1/image_raw", Image, driver)
 
 #Bridge ros and opencv
 bridge = CvBridge()

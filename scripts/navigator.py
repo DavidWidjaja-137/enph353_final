@@ -16,6 +16,7 @@ ROUTE_2 = [0, 1, 2, 3, 4, 12, 11, 13, 4, 12, 11]
 ROUTE_3 = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
 ROUTE_4 = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 4, 13, 11]
 
+#Movement Codes
 IDK = -1
 FWD_LOOK_LEFT = 0
 FWD_LOOK_RIGHT = 1
@@ -24,6 +25,11 @@ FWD_LOOK_CROSS = 3
 TURN_LEFT = 4
 TURN_RIGHT = 5
 TURN_AROUND = 6
+
+#Colour codes
+BLUE = 0
+GREEN = 1
+YELLOW = 2
 
 class FiniteStateNavigator:
 
@@ -53,34 +59,81 @@ class FiniteStateNavigator:
     def get_previous_node(self):
 
         if self.index == 0:
-            self.index = len(self.route) - 1
+            return self.route[len(self.route) - 1]
+        else:
+            return self.route[self.index - 1]
         
-        return self.route[self.index - 1] 
-
     #lock the current state the finite state machine
     def lock_current_state(self):
+        
+        #TESITNG
+        print("state locked")
 
         self.state_lock = True
    
     #unlock the current state of the finite state machine 
     def unlock_current_state(self):
 
+        #TESTING
+        print("state unlocked")
+
         self.state_lock = False
 
     #Update the position of the node
     def update_state(self):
 
-        if self.state_lock == True:
-            self.curr = self.curr + 1
-            return self.curr
+        #State can only be updated when it is not locked in place
+        if self.state_lock == False:
+            self.index = self.index + 1
+
+            #overflow, so loop back
+            if self.index == len(self.route):
+               self.index = 0
+            
+            #TESTING
+            print("state updated to {}".format(self.route[self.index]))
+
+            return self.index
+
         else:
+
+            #TESTING
+            print("State update from {} failed; state lock still active".format( \
+                   self.route[self.index]))
             return -1
+
+    #Get the colour of the current car
+    def get_car_colour(self):
+
+        curr = self.route[self.index]
+
+        if curr == 2 or curr == 1:
+            
+            #TESTING
+            print("BLUE car is here")
+
+            return BLUE
+
+        elif curr == 12 or curr == 7:
+            
+            #TESTING
+            print("GREEN car is here")
+
+            return GREEN 
+
+        elif curr == 13 or curr == 8:
+
+            #TESTING
+            print("YELLOW car is here")
+
+            return YELLOW
         
     #Get the current behavior of the node from the finite state machine
     def get_current_behavior(self):
 
-        nex == self.get_next_node(curr)
-        previous = self.get_previous_node(curr)
+        curr = self.route[self.index]
+        nex = self.get_next_node()
+        prev = self.get_previous_node()
         
         #Note: FML, if only I knew a bit of graph theory
 
@@ -92,11 +145,17 @@ class FiniteStateNavigator:
             #Tell the driver to look right for a car while moving forward
             movement = FWD_LOOK_RIGHT
 
+            #TESTING
+            print("FWD_LOOK_RIGHT curr: {} nex: {}".format(curr, nex))
+
         elif ((curr == 11 and nex == 13) or \
              (curr == 4 and nex == 12)) and self.state_lock == False:
 
             #Tell the driver to look left for a car while moving forward
             movement = FWD_LOOK_LEFT
+
+            #TESTING
+            print("FWD_LOOK_LEFT curr: {} nex: {}".format(curr, nex))
 
         elif ((curr == 2 and nex == 3) or \
              (curr == 3 and nex == 0) or \
@@ -118,6 +177,9 @@ class FiniteStateNavigator:
             #Tell the driver to not look for anything while moving forward
             movement = FWD_LOOK_NONE
 
+            #TESTING
+            print("FWD_LOOK_NONE curr: {} nex: {}".format(curr, nex))
+
         elif ((curr == 4 and nex == 5) or \
              (curr == 6 and nex == 5) or \
              (curr == 9 and nex == 10) or \
@@ -127,6 +189,9 @@ class FiniteStateNavigator:
 
             #Tell the driver to look forward for a crosswalk
             movement = FWD_LOOK_CROSS
+
+            #TESTING
+            print("FWD_LOOK_CROSS curr: {} nex: {}".format(curr, nex))
 
         elif ((prev == 2 and curr == 3 and nex == 4) or \
              (prev == 11 and curr == 0 and nex == 1) or \
@@ -144,6 +209,9 @@ class FiniteStateNavigator:
  
             #Tell the driver to turn right
             movement = TURN_RIGHT
+
+            #TESTING
+            print("TURN_RIGHT curr: {} nex: {} prev: {}".format(curr, nex, prev))
         
         elif ((prev == 4 and curr == 3 and nex == 0) or \
              (prev == 3 and curr == 0 and nex == 11) or \
@@ -154,7 +222,7 @@ class FiniteStateNavigator:
              (prev == 14 and curr == 4 and nex == 12) or \
              (prev == 5 and curr == 14 and nex == 12) or \
              (prev == 10 and curr == 9 and nex == 6) or \
-             (prev == 9 and curr == 6 and nex == 5)) and self.state_lock == True
+             (prev == 9 and curr == 6 and nex == 5)) and self.state_lock == True:
              
             #Illegal: 5-4-12, 
             #         11-15-13
@@ -162,15 +230,25 @@ class FiniteStateNavigator:
             #Tell the driver to turn left
             movement = TURN_LEFT
 
+            #TESTING
+            print("TURN_LEFT curr: {} nex: {} prev: {}".format(curr, nex, prev))
+
         elif ((prev == 13 and curr == 4 and nex == 12) or \
-             (prev == 12 and curr == 11 and nex == 13)) and self.state_lock == True
+             (prev == 12 and curr == 11 and nex == 13)) and self.state_lock == True:
                
             #Tell the driver to do a 180 turn 
             movement = TURN_AROUND
+
+            #TESTING
+            print("TURN_AROUND curr: {} nex: {} prev: {}".format(curr, nex, prev))
 
         else:
            
             #Note: This should be an impossible state. Curl up and cry
             movement = IDK
+
+            #TESTING
+            print("IDK curr: {} nex: {} prev: {} lock: {}".format(curr, nex, \
+                                                            prev, self.state_lock))
 
         return movement

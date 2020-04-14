@@ -46,3 +46,19 @@ right turn -> crosswalk
 crosswalk -> right turn -> right turn
 crosswalk -> right turn
 
+##############################################################
+How to prevent the same car from being detected twice?
+##############################################################
+
+If there appears to be a car, set a flag to True
+Subsequently, check whether there appears to be a car
+If the car is still there
+    Keep the flag True. As long as the flag is True, the car cannot use SIFT again
+If the car is no longer there
+    Keep the flag to False. The car can now use SIFT again
+
+
+
+
+
+
