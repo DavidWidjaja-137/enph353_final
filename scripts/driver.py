@@ -21,6 +21,7 @@ from geometry_msgs.msg import Twist
 
 #local modules
 import sift_based_car_finder
+import navigator
 #import hough_based_car_finder
 
 #Robot Camera Parameters
@@ -44,7 +45,6 @@ MAX_GAP = 75
 
 #Direction Thesholds
 FWD_THRESH_P = 3        #to confirm a way forward, 3 vertical lines are needed
-                        #to follow an available line, 2 vertical lines is good enough.
 LEFT_THRESH_P = 1
 RIGHT_THRESH_P = 1
 MID_THRESH_P = 1
@@ -68,10 +68,13 @@ BLUE_THRESHOLD = 5500000
 
 # Movement Codes
 IDK = -1
-FWD = 0
-LEFT = 1
-RIGHT = 2
-LEFTRIGHT = 3
+FWD_LOOK_LEFT = 0
+FWD_LOOK_RIGHT = 1
+FWD_LOOK_NONE = 2
+FWD_LOOK_CROSS = 3
+TURN_LEFT = 4
+TURN_RIGHT = 5
+TURN_AROUND = 6
 
 #PID parameters
 INTEGRAL_WINDUP = 0.5
@@ -108,8 +111,7 @@ def edge_detector_p(cv_img_binary, blank_image, draw = True):
     #Use Probabilistic Hough Transform to find edges
     edges = cv.Canny(cv_img_binary, CANNY_L, CANNY_H, apertureSize = 3)
     lines = cv.HoughLinesP(edges, 1, np.pi/180, HOUGH_THRESH_P,\
-                             minLineLength=MIN_LINE,maxLineGap=MAX_GAP)
-    
+                             minLineLength=MIN_LINE,maxLineGap=MAX_GAP)    
     line_coords = []
     if lines is not None:
         for line in lines:
@@ -124,20 +126,23 @@ def edge_detector_p(cv_img_binary, blank_image, draw = True):
     middle_pt = 0          #line in the middle is detected
     idk_pt = 0             #unsure
     for i in range(len(line_coords)):
+
+        #Calculate the gradient of the lines
         x1, y1, x2, y2 = line_coords[i]
         if x2 - x1 != 0:
             gradient = abs(((float) (y2 - y1))/((float) (x2 - x1)))
         else:
             gradient = 1 #definitely vertical
 
-        #If it is a vertical line
+        #If it is a vertical line, add to the number of vertical lines
         gradients.append(gradient)
         if gradient > 0.5:
             if draw == True:
                 cv.line(blank_image, (x1,y1), (x2,y2),\
                          (0,255,0),2)
             fwd_pt = fwd_pt + 1
-        #If it is a horizontal line
+
+        #If it is a horizontal line, add to the number of horizontal lines
         elif gradient < 0.3:
             if draw == True:
                 cv.line(blank_image, (x1,y1), (x2,y2), (255,0,0),2)
@@ -151,6 +156,7 @@ def edge_detector_p(cv_img_binary, blank_image, draw = True):
             #if one coordinate is on the left and another on the right
             else:
                 middle_pt = middle_pt + 1
+
         #If it is an IDK line
         else:
             if draw == True:
@@ -174,7 +180,7 @@ def edge_detector_p(cv_img_binary, blank_image, draw = True):
 #           right: True if the right path is available
 def determine_motion(edge_points):
  
-    #Determine what movements are currently available 
+    #Determine what movements are currently available based on observations
     forward = False  
     left = False
     right = False
@@ -204,6 +210,8 @@ def determine_motion(edge_points):
 # returns True or False 
 def check_for_car(img):
 
+    #Mask and sum images to check if a car is available
+
     yg_mask = cv.inRange(img, YG_LOW, YG_HIGH)
     blue_mask = cv.inRange(img, BLUE_LOW, BLUE_HIGH)
 
@@ -211,7 +219,7 @@ def check_for_car(img):
     blue_sum = blue_mask.sum()
 
     #TESTING
-    #print("yg_sum: {} blue_sum: {}".format(yg_sum, blue_sum))
+    print("Checking for car: yg_sum: {} blue_sum: {}".format(yg_sum, blue_sum))
 
     if yg_sum > YG_THRESHOLD or blue_sum > BLUE_THRESHOLD:
         return True
@@ -252,7 +260,8 @@ def driver(data):
     
     #if the vehicle is not in the middle of a turn, determine new movement
     if lock_movement == False:
-       
+      
+        #If there appears to be only a left turn, or only a right turn, 
         if left != right:
             #there is a possibility that the vehicle is misaligned so only 1
             # horizontal edge is visible. This can be solved by temporarily increasing
@@ -260,7 +269,7 @@ def driver(data):
             # properly, this statement should only be reached at intersections.
            
             #TESTING 
-            print("Starting Variation on left: {} right: {}".format(left, right))
+            print("Evaluating correctness of left: {} right: {}".format(left, right))
        
             #Get an enlarged version of the target image 
             #10 is too little to detect the new edge
@@ -273,8 +282,9 @@ def driver(data):
             #Obtain a new set of edges
             edge_points_mod, cv_img_mod = edge_detector_p(cv_img_mod_binary, cv_img_mod)
             retval, left_new, right_new = determine_motion(edge_points_mod)
-             
-            cv.imshow("VARIATION", cv_img_mod)
+            
+            #TESTING 
+            #cv.imshow("VARIATION", cv_img_mod)
             
             #If the first reading is incorrect and the variation corrected it, 
             if left_new == right_new:
@@ -283,6 +293,7 @@ def driver(data):
                 
                 #TESTING
                 print("New edge found: left: {} right: {}".format(left, right))
+
             else:
 
                 #TESTING
@@ -294,8 +305,8 @@ def driver(data):
         #The only available way is forward
         if forward == True and left == False and right == False:
 
-            #If the directed movement says go forward, then all is good because 
-            # the required movement is actualy possible. Otherwise, panik
+            #Note: For a car to continue moving forward, no change in state, no
+            # updating or locking, is required.
             movement = navigator.get_current_behavior()
 
             #TESTING
@@ -311,8 +322,8 @@ def driver(data):
 
             #Use the fsm for navigation
             navigator.update_state()
-            movement = navigator.get_current_behavior()
             navigator.lock_state()
+            movement = navigator.get_current_behavior()
 
             #TESTING
             #movement = TURN_RIGHT
@@ -326,8 +337,8 @@ def driver(data):
 
             #Use the fsm for navigation
             navigator.update_state()
-            movement = navigator.get_current_behavior()
             navigator.lock_state()
+            movement = navigator.get_current_behavior()
 
             #TESTING
             #movement = TURN_LEFT
@@ -341,8 +352,8 @@ def driver(data):
 
             #Use the fsm for navigation
             navigator.update_state()
-            movement = navigator.get_current_behavior()
             navigator.lock_state()
+            movement = navigator.get_current_behavior()
 
             #TESTING
             #movement = TURN_RIGHT
@@ -360,14 +371,11 @@ def driver(data):
             if edge_points[0] >= 1 and left == False and right == False:
 
                 #TESTING
-                print("Warning: Vehicle is moving forward but may be off course")
+                print("Warning: Vehicle moving forward but veering. ")
 
                 forward = True
 
-                #Use the fsm for navigation
-                navigator.update_state()
                 movement = navigator.get_current_behavior()
-                navigator.lock_state()
 
                 #TESTING
                 #movement = FWD_LOOK_NONE
@@ -376,29 +384,31 @@ def driver(data):
             elif edge_points[0] >= 2 and left == True and right == False:
 
                 #TESTING
-                print("Warning: Vehicle detects left but may be off course")
+                print("Warning: Vehicle detects left but is veering. ")
 
                 #Use the fsm for navigation
                 navigator.update_state()
-                movement = navigator.get_current_behavior()
                 navigator.lock_state()
-                
+                movement = navigator.get_current_behavior()
+               
+                #TESTING 
                 #movement = TURN_LEFT
 
             #Same as forward == True and left == False and right == True
             elif edge_points[0] >= 2 and left == False and right == True:
 
                 #TESTING
-                print("Warning: Vehicle detects right but may be off course")
+                print("Warning: Vehicle detects right but is veering. ")
 
                 #Use the fsm for navigation
                 navigator.update_state()
-                movement = navigator.get_current_behavior()
                 navigator.lock_state()
-        
+                movement = navigator.get_current_behavior()
+       
+                #TESTING 
                 #movement = RIGHT 
 
-            #The car really doesnt know where it is. Panik
+            #The car really doesnt know where it is.
             else:
 
                 #TESTING
@@ -443,7 +453,7 @@ def driver(data):
  
             elif evaluation_lock == 5:
    
-                #Apply bandpass filter to obtain only red part of image
+                #Extract only the red part of the image
                 cv_redmask = cv.inRange(cv_img_raw[-(IMG_HEIGHT+40):, :, :], RED_LOW, RED_HIGH)
 
                 redmask_sum = cv_redmask.sum()
@@ -474,6 +484,9 @@ def driver(data):
                     #Note: At this point, the turn is complete. Unlock the state lock on the 
                     # finite state machine
                     navigator.unlock_current_state()
+
+                    #Now that the vehicle is unlocked, it is free to move forward until
+                    # it reaches the next node
                     movement = navigator.get_current_behavior()
                     
                 else:
@@ -530,12 +543,15 @@ def driver(data):
           
         if upper_found == False:
             upper = IMG_WIDTH - 2
-          
+
+        #Obtain the error
+        error = IMG_WIDTH/2 - int((upper + lower)/2)
+
+        #TESTING          
         cv.circle(blank_image, (upper, IMG_HEIGHT - 10), 10, (0,0,255), -1)
         cv.circle(blank_image, (lower, IMG_HEIGHT - 10), 10, (0,255,0), -1)
-        
-        error = IMG_WIDTH/2 - int((upper + lower)/2)
-        
+       
+        #Use PID to correct the forward movement of the vehicle 
         move = Twist()
         move.linear.x = 1.0
         move.linear.y = 0.0
@@ -560,17 +576,42 @@ def driver(data):
              
         previous_error = error
 
+        #Note: Now that the PID is settled, search for features on the track
         if movement == FWD_LOOK_LEFT:
 
             check_img = cv_img_raw[:, 0:200, :]
+
+        elif movement == FWD_LOOK_RIGHT:
+            
+            check_img = cv_img_raw[:
 
             if check_for_car(check_img) is True:
 
                 #This means that the vehicle is in a position to read for a car
                 navigator.update_state()
                 navigator.lock_current_state()
-                #TODO: SIFT and NN
-                #TODO: report number and position
+
+                #Apply SIFT to extract a sub-image from the main image
+                check_img_gray = cv.cvtColor(check_img, BGR2GRAY)
+                img_colour = navigator.get_car_colour()
+                edges = car_matcher.match_car(check_img_gray, img_color)
+
+                if edges is not None:
+
+                    cropped_image = check_img[edges[0][0]:edges[1][0], edges[0][1]:edges[1][1], :]
+    
+                    #TESTING
+                    cv.imshow("SIFT output", cropped_image)
+                    cv.waitKey(1)
+
+                else:
+                    
+                    print("Image could not be obtained")
+
+                #TODO: Call NN code to read the license plate
+
+                #TODO: Check that the output of the NN is satisfactory before moving on
+                #       Otherwise, repeat the steps above
                 navigator.unlock_current_state()
                 
         elif movement == FWD_LOOK_RIGHT:
@@ -582,8 +623,29 @@ def driver(data):
                 #This means that the vehicle is in a position to read for a car
                 navigator.update_state()
                 navigator.lock_current_state()
-                #TODO: SIFT and NN
-                #TODO: report number and position
+
+                #Apply SIFT to extract a sub-image from the main image
+                check_img_gray = cv.cvtColor(check_img, BGR2GRAY)
+                img_colour = navigator.get_car_colour()
+                edges = car_matcher.match_car(check_img_gray, img_color)
+
+                if edges is not None:
+
+                    cropped_image = check_img[edges[0][0]:edges[1][0], edges[0][1]:edges[1][1], :]
+    
+                    #TESTING
+                    cv.imshow("SIFT output", cropped_image)
+                    cv.waitKey(1)
+
+                else:
+
+                    print("Image could not be obtained")
+                    
+                 
+                #TODO: Call NN code to read the license plate
+
+                #TODO: Check that the output of the NN is satisfactory before moving on
+                #        Otherwise, repeat the steps above
                 navigator.unlock_current_state()
 
         elif movement == FWD_LOOK_CROSS:
@@ -594,7 +656,7 @@ def driver(data):
                 #A state change occurs.
                 navigator.update_state()
                 navigator.lock_current_state()
-                #TODO: Subroutine to cross the crosswalk safely
+                #TODO: Subroutine to cross the crosswalk safely                
                 navigator.unlock_current_state()
             
     #Execute semi-hardcoded subroutine to turn left.        
@@ -773,6 +835,9 @@ car_finder = sift_based_car_finder.SIFTBasedCarFinder()
 
 #Initialize edge-based car finder
 #car_finder = hough_based_car_finder.EdgeBasedCarFinder()
+
+#Initialize the finite state machine navigator
+navigator = navigator.FiniteStateNavigator()
 
 #Delay for observation purposes
 rospy.sleep(10)
