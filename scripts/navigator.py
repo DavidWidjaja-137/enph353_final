@@ -93,7 +93,7 @@ class FiniteStateNavigator:
             #TESTING
             print("state updated to {}".format(self.route[self.index]))
 
-            return self.index
+            return self.route[self.index]
 
         else:
 
@@ -103,28 +103,31 @@ class FiniteStateNavigator:
             return -1
 
     #Get the colour of the current car
-    def get_car_colour(self):
+    def get_car_colour(self, next_node = False):
 
-        curr = self.route[self.index]
+        if next_node == True:
+            curr = self.get_next_node()
+        else:
+            curr = self.get_current_node()
 
         if curr == 2 or curr == 1:
             
             #TESTING
-            print("BLUE car is here")
+            print("Look for a BLUE car")
 
             return BLUE
 
         elif curr == 12 or curr == 7:
             
             #TESTING
-            print("GREEN car is here")
+            print("Look for a GREEN car")
 
             return GREEN 
 
         elif curr == 13 or curr == 8:
 
             #TESTING
-            print("YELLOW car is here")
+            print("Look for a YELLOW car")
 
             return YELLOW
         

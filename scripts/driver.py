@@ -65,6 +65,8 @@ BLUE_HIGH = np.array([240,40,40])
 #Color Thresholds
 YG_THRESHOLD = 3000000
 BLUE_THRESHOLD = 4500000
+YG_THRESHOLD_LOW = 500000
+BLUE_THRESHOLD_LOW = 500000
 #BLUE_THRESHOLD = 5500000
 
 # Movement Codes
@@ -210,23 +212,44 @@ def determine_motion(edge_points):
 #Check if a particular frame convincingly has a car in it
 # img: a bgr image
 # returns True or False 
-def check_for_car(img):
+def check_for_car(img, car_colour):
 
     #Mask and sum images to check if a car is available
 
-    yg_mask = cv.inRange(img, YG_LOW, YG_HIGH)
-    blue_mask = cv.inRange(img, BLUE_LOW, BLUE_HIGH)
+    if car_colour == BLUE:
+        
+        blue_mask = cv.inRange(img, BLUE_LOW, BLUE_HIGH)
+        blue_sum = blue_mask.sum()
 
-    yg_sum = yg_mask.sum()
-    blue_sum = blue_mask.sum()
-
-    #TESTING
-    print("Checking for car: yg_sum: {} blue_sum: {}".format(yg_sum, blue_sum))
-
-    if yg_sum > YG_THRESHOLD or blue_sum > BLUE_THRESHOLD:
-        return True
+        #TESTING
+        print("Checking for BLUE car: {}".format(blue_sum))
+        if blue_sum > BLUE_THRESHOLD:
+            print("There is a BLUE car here")
+            return True
+        elif blue_sum < BLUE_THRESHOLD_LOW:
+            print("there is NO BLUE car here")
+            return False
+        else:
+            print("BLUE tapering")
+            return None
+    
     else:
-        return False
+    
+        yg_mask = cv.inRange(img, YG_LOW, YG_HIGH)
+        yg_sum = yg_mask.sum()
+    
+        #TESTING
+        print("Checking for YELLOWGREEN car: {}".format(yg_sum))
+
+        if yg_sum > YG_THRESHOLD:
+            print("There is a YELLOWGREEN car here")
+            return True
+        elif yg_sum < YG_THRESHOLD_LOW:
+            print("There is NO YELLOWGREEN car here")
+            return False
+        else:
+            print("YELLOWGREEN tapering")
+            return None
 
 #Controls the model vehicle
 # data: raw ROS image file
@@ -591,16 +614,18 @@ def driver(data):
             cv.imshow("check_img", check_img)
             cv.waitKey(1)
 
-            if check_for_car(check_img) is True and car_found == False:
+            img_colour = navigator.get_car_colour(next_node = True)
+            current_car_found = check_for_car(check_img, img_colour)
+            if current_car_found is True and car_found == False:
 
                 print("A car was detected on the left")
 
                 #TESTING
-                cv.imshow("car detected here", check_img)
-                cv.waitKey(1)
+                #cv.imshow("car detected here", check_img)
+                #cv.waitKey(1)
 
                 #This means that the vehicle is in a position to read for a car
-                navigator.update_state()
+                new_state = navigator.update_state()
                 navigator.lock_current_state()
 
                 #Apply SIFT to extract a sub-image from the main image
@@ -610,15 +635,30 @@ def driver(data):
 
                 if edges is not None:
 
-                    cropped_image = check_img[edges[0][1]:edges[1][1], edges[0][0]:edges[1][0], :]
+                    if edges[0][1] - 40 > 0:
+                        min_y = edges[0][1] - 40
+                    else: 
+                        min_y = 0
+
+                    if edges[1][1] + 40 > len(check_img):
+                        max_y = edges[1][1] + 40
+                    else:
+                        max_y = len(check_img)
+                        
+                    cropped_image = check_img[min_y:max_y, edges[0][0]:edges[1][0], :]
     
                     #TESTING
-                    cv.imshow("SIFT output", cropped_image)
+                    print("Image successfully obtained at node {}".format(new_state))
+                    cv.imshow("SIFT output at node {}".format(new_state), cropped_image)
                     cv.waitKey(1)
 
                 else:
-                    
-                    print("Image could not be obtained")
+
+                    #TESTING
+                    print("Image could not be obtained at node {}".format(new_state))
+                    cv.imshow("Failed SIFT at node {}".format(new_state), check_img)
+                    cv.waitKey(1)
+                 
 
                 #TODO: Call NN code to read the license plate
 
@@ -633,7 +673,12 @@ def driver(data):
             else:
                 
                 #If no car was found, that means that the old car is gone
-                car_found = False
+                if current_car_found is False:
+
+                    #TESTING
+                    print("car is gone")
+
+                    car_found = False
                 
         elif movement == FWD_LOOK_RIGHT:
 
@@ -643,16 +688,18 @@ def driver(data):
             cv.imshow("check_img", check_img)
             cv.waitKey(1)
 
-            if check_for_car(check_img) is True and car_found == False:
+            img_colour = navigator.get_car_colour(next_node = True)
+            current_car_found = check_for_car(check_img, img_colour)
+            if current_car_found is True and car_found is False:
 
                 print("A car was detected on the right")
 
                 #TESTING
-                cv.imshow("car detected here", check_img)
-                cv.waitKey(1)
+                #cv.imshow("car detected here", check_img)
+                #Jcv.waitKey(1)
 
                 #This means that the vehicle is in a position to read for a car
-                navigator.update_state()
+                new_state = navigator.update_state()
                 navigator.lock_current_state()
 
                 #Apply SIFT to extract a sub-image from the main image
@@ -662,15 +709,29 @@ def driver(data):
 
                 if edges is not None:
 
-                    cropped_image = check_img[edges[0][1]:edges[1][1], edges[0][0]:edges[1][0], :]
+                    if edges[0][1] - 40 > 0:
+                        min_y = edges[0][1] - 40
+                    else: 
+                        min_y = 0
+
+                    if edges[1][1] + 40 > len(check_img):
+                        max_y = edges[1][1] + 40
+                    else:
+                        max_y = len(check_img)
+                        
+                    cropped_image = check_img[min_y:max_y, edges[0][0]:edges[1][0], :]
     
                     #TESTING
-                    cv.imshow("SIFT output", cropped_image)
+                    print("Image successfully obtained at node {}".format(new_state))
+                    cv.imshow("SIFT output at node {}".format(new_state), cropped_image)
                     cv.waitKey(1)
 
                 else:
 
-                    print("Image could not be obtained")
+                    #TESTING
+                    print("Image could not be obtained at node {}".format(new_state))
+                    cv.imshow("Failed SIFT at node {}".format(new_state), check_img)
+                    cv.waitKey(1)
                     
                  
                 #TODO: Call NN code to read the license plate
@@ -685,8 +746,12 @@ def driver(data):
 
             else:
 
-                #If no car was found, that means that the old car is gone
-                car_found = False
+                if current_car_found is False:
+                    
+                    #TESTING
+                    print("car is gone")
+
+                    car_found = False
 
         elif movement == FWD_LOOK_CROSS:
 
@@ -698,6 +763,10 @@ def driver(data):
                 navigator.lock_current_state()
                 #TODO: Subroutine to cross the crosswalk safely                
                 navigator.unlock_current_state()
+
+        elif movement == FWD_LOOK_NONE:
+            
+            car_found = False
             
     #Execute semi-hardcoded subroutine to turn left.        
     elif movement == TURN_LEFT:
@@ -816,11 +885,13 @@ def driver(data):
         print("f: {} l: {} r: {} m: idk: {}".format(edge_points[0], edge_points[1], \
                     edge_points[2], edge_points[3], edge_points[4]))
 
-        cv.imshow('error_lines', blank_image)
-        cv.waitKey(1)
-        
-        cv.imshow('error_raw', cv_img)
-        cv.waitKey(1)
+        #TESTING
+        #cv.imshow('error_lines', blank_image)
+        #cv.waitKey(1)
+       
+        #TESTING 
+        #cv.imshow('error_raw', cv_img)
+        #cv.waitKey(1)
 
         while True:
             continue
