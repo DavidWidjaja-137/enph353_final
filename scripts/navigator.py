@@ -25,6 +25,7 @@ FWD_LOOK_CROSS = 3
 TURN_LEFT = 4
 TURN_RIGHT = 5
 TURN_AROUND = 6
+FWD_CROSS_WITHOUT_KILL = 7
 
 #Colour codes
 BLUE = 0
@@ -100,6 +101,7 @@ class FiniteStateNavigator:
             #TESTING
             print("State update from {} failed; state lock still active".format( \
                    self.route[self.index]))
+
             return -1
 
     #Get the colour of the current car
@@ -109,26 +111,26 @@ class FiniteStateNavigator:
             curr = self.get_next_node()
         else:
             curr = self.get_current_node()
-
+        
         if curr == 2 or curr == 1:
             
             #TESTING
             print("Look for a BLUE car")
-
+        
             return BLUE
-
+        
         elif curr == 12 or curr == 7:
             
             #TESTING
             print("Look for a GREEN car")
-
+        
             return GREEN 
-
+        
         elif curr == 13 or curr == 8:
 
             #TESTING
             print("Look for a YELLOW car")
-
+        
             return YELLOW
         
     #Get the current behavior of the node from the finite state machine
@@ -195,6 +197,14 @@ class FiniteStateNavigator:
 
             #TESTING
             print("FWD_LOOK_CROSS curr: {} nex: {}".format(curr, nex))
+    
+        elif (curr == 5 or curr == 10) and self.state_lock == True:
+
+            movement = FWD_CROSS_WITHOUT_KILL
+
+            #TESTING
+            print("FWD_CROSS_WITHOUT_KILL curr: {} nex: {} prev: {}".format( \
+                    curr, nex, prev))
 
         elif ((prev == 2 and curr == 3 and nex == 4) or \
              (prev == 11 and curr == 0 and nex == 1) or \

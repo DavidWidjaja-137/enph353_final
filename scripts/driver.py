@@ -78,6 +78,7 @@ FWD_LOOK_CROSS = 3
 TURN_LEFT = 4
 TURN_RIGHT = 5
 TURN_AROUND = 6
+FWD_CROSS_WITHOUT_KILL = 7
 
 #PID parameters
 INTEGRAL_WINDUP = 0.5
@@ -94,8 +95,10 @@ movement = FWD_LOOK_RIGHT
 move = Twist()
 n_turns = 0
 car_found = False
+previous_image = np.zeros((480, 640), np.uint8)
 
 turn_thresh = [20, 15, 20, 18]
+
 
 #Counts the number and type of edges in the given image
 # cv_img_binary: greyscale opencv image, bgr color
@@ -172,6 +175,7 @@ def edge_detector_p(cv_img_binary, blank_image, draw = True):
     
     return ((fwd_pt, left_pt, right_pt, middle_pt, idk_pt), blank_image) 
 
+
 #Determines the possible directions of motion
 # edge_points: (fwd_pt, left_pt, right_pt, middle_pt)
 #           fwd_pt is the number of forward-pointing lines
@@ -209,6 +213,7 @@ def determine_motion(edge_points):
    
     return (forward, left, right)
 
+
 #Check if a particular frame convincingly has a car in it
 # img: a bgr image
 # returns True or False 
@@ -230,7 +235,7 @@ def check_for_car(img, car_colour):
             print("there is NO BLUE car here")
             return False
         else:
-            print("BLUE tapering")
+            print("BLUE not detected sufficiently")
             return None
     
     else:
@@ -248,8 +253,9 @@ def check_for_car(img, car_colour):
             print("There is NO YELLOWGREEN car here")
             return False
         else:
-            print("YELLOWGREEN tapering")
+            print("YELLOWGREEN not detected sufficiently")
             return None
+
 
 #Controls the model vehicle
 # data: raw ROS image file
@@ -264,6 +270,7 @@ def driver(data):
     global n_turns
     global move
     global car_found
+    global previous_image
 
     #Obtain and crop the raw image
     cv_img_raw = bridge.imgmsg_to_cv2(data, "bgr8")
@@ -313,7 +320,8 @@ def driver(data):
             #cv.imshow("VARIATION", cv_img_mod)
             
             #If the first reading is incorrect and the variation corrected it, 
-            if left_new == right_new:
+            #And also if it did not make it worse, 
+            if left_new == right_new and left_new == True:
                 left = left_new
                 right = right_new
                 
@@ -527,7 +535,8 @@ def driver(data):
     #If the vehicle should move forward, apply PID on the edges of the line
     #Also actively search the left and right for cars
     if movement == FWD_LOOK_LEFT or movement == FWD_LOOK_RIGHT or \
-        movement == FWD_LOOK_NONE or movement == FWD_LOOK_CROSS:
+        movement == FWD_LOOK_NONE or movement == FWD_LOOK_CROSS or \
+        movement == FWD_CROSS_WITHOUT_KILL:
 
         #Note: A car moving forward will either encounter a turn, a car or a crosswalk
         # If it is a crosswalk, then a new flag system must be devised to handle it
@@ -601,12 +610,14 @@ def driver(data):
          
         move.angular.z = proportional_response + differential_response + integral_response
              
-        pub_vel.publish(move)
-             
+        #pub_vel.publish(move)
+         
         previous_error = error
 
         #Note: Now that the PID is settled, search for features on the track
         if movement == FWD_LOOK_LEFT:
+
+            pub_vel.publish(move)
 
             check_img = cv_img_raw[:, 0:200, :]
             
@@ -682,6 +693,8 @@ def driver(data):
                 
         elif movement == FWD_LOOK_RIGHT:
 
+            pub_vel.publish(move)
+
             check_img = cv_img_raw[:, -200:, :]
 
             #TESTING
@@ -755,19 +768,84 @@ def driver(data):
 
         elif movement == FWD_LOOK_CROSS:
 
+            #Note: At ths point, we are moving forward, and we need to find a 
+            # crosswalk right in front of us. 
+
             #If a crosswalk is actually here
-            if edge_points[0] > 20:
+            if edge_points[0] > CROSSWALK_THESHOLD:
                 
-                #A state change occurs.
+                #TESTING
+                print("A crosswalk directly ahead is detected!")
+
+                rospy.sleep(0.5)
+               
+                #TESTING
+                print("Stopping car due to crosswalk....") 
+
+                move = Twist()
+                move.linear.x = 0.0
+                move.linear.y = 0.0
+                move.angular.z = 0.0
+                pub_vel.publish(move)
+
+                #Sleep for 1 second just to be sure
+                rospy.sleep(1.0)
+                
+                #TESTING
+                print("Car stopped due to crosswalk")
+
                 navigator.update_state()
                 navigator.lock_current_state()
-                #TODO: Subroutine to cross the crosswalk safely                
-                navigator.unlock_current_state()
+
+                previous_image = cv_img_raw
+
+            else:
+               
+                #Publish the old PID 
+                pub_vel.publish(move)
 
         elif movement == FWD_LOOK_NONE:
-            
+
+            #Publish the old PID
+            pub_vel.publish(move)
+
+            #Signify that the old car is no longer needed
+            car_found = False
+
+        elif movmeent == FWD_CROSS_WITHOUT_KILL:
+           
+            pub_vel.publish(move)
+
             car_found = False
             
+            #Note: At this point, the car is ready to enter the junction.
+            #      Use the difference between the current and previous frame
+            #      to determine if someone is on the track. 
+            
+            img_diff = cv.subtract(cv_img_raw, previous_image)
+            img_diff_sum = img_diff.sum()
+
+            if img_diff_sum > 50000 and img_diff_sum < 150000:
+
+                #TESTING
+                print("GUY ON ROAD! Car is stopped")
+                
+                move = Twist()
+                move.linear.x = 0.0
+                move.linear.y = 0.0
+                move.angular.z = 0.0
+                pub_vel.publish(move)
+
+            else:
+                
+                #TESTING 
+                print("Guy is not on road. Move along")
+
+                #Publish the old PID
+                pub_vel.publish(move) 
+
+            previous_image = cv_img_raw
+             
     #Execute semi-hardcoded subroutine to turn left.        
     elif movement == TURN_LEFT:
 
@@ -899,12 +977,14 @@ def driver(data):
     cv.imshow('img', blank_image)
     cv.waitKey(1)
 
+
 #Function to test various aspects of the vehicle without controlling it
 # data: raw ROS image file
 def observer(data):
     
     global lock_movement
     global movement
+    global previous_image
     
     #Obtain and crop the original image
     cv_img = bridge.imgmsg_to_cv2(data, "bgr8")
@@ -916,24 +996,41 @@ def observer(data):
     kernel = np.ones((5,5), np.float32)/25
     cv_img_gray = cv.filter2D(cv_img_gray,-1,kernel)
     retval, cv_img_binary = cv.threshold(cv_img_gray, BINARY_THRESH, 255, cv.THRESH_BINARY)
-
-    #Instantiate a blank array for illustration purposes
-    blank_image = np.zeros((IMG_HEIGHT, IMG_WIDTH, 3), np.uint8)
     
+    #Instantiate a blank array for illustration purposes
+    #blank_image = np.zeros((IMG_HEIGHT, IMG_WIDTH, 3), np.uint8)
+     
     #Obtain edges to determine current position on board
-    edge_points, blank_image = edge_detector_p(cv_img_binary, blank_image)
-
+    #edge_points, blank_image = edge_detector_p(cv_img_binary, blank_image)
+        
     #cv_img_side = cv_img_upper[:, 0:200, :]
     #cv_img_side = cv_img_upper[:, -200:, :]
-    cv_img_side = cv_img_upper[:, -200:, :]
-
+    #cv_img_side = cv_img_upper[:, -200:, :]
+    
     #check_for_car(cv_img_side)
-    cv.imshow("edges", blank_image)
+    #cv.imshow("edges", blank_image)
+    #cv.waitKey(1)
+    #cv.imshow("side", cv_img_side)
+    #cv.waitKey(1)
+     
+    #Note, I'm going to try taking 2 greyscale images and doing bitwise and
+    #If the bitwise and is sufficiently different, then clearly something is moving
+
+    difference = cv.subtract(cv_img_gray, previous_image)
+
+    summa = difference.sum()
+
+    if (summa > 70000 and summa < 150000):
+        print("guy is here")
+    
+    cv.imshow("img", cv_img_gray)
     cv.waitKey(1)
-    cv.imshow("side", cv_img_side)
+
+    cv.imshow("diff", difference) 
     cv.waitKey(1)
-    cv.imshow("img", cv_img)
-    cv.waitKey(1)
+
+    previous_image = cv_img_gray
+
 
 #Initialize the node
 rospy.init_node('driver')
