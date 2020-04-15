@@ -12,9 +12,7 @@ import numpy as np
 ROUTE_1 = [0, 1, 2, 3, 4, 12, 11]
 
 #Currently Impossible routes
-ROUTE_2 = [0, 1, 2, 3, 4, 12, 11, 13, 4, 12, 11]
-ROUTE_3 = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
-ROUTE_4 = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 4, 13, 11]
+ROUTE_2 = [0, 1, 2, 3, 4, 14, 5, 6, 7, 8, 9, 10, 15, 11, 0]
 
 #Movement Codes
 IDK = -1
@@ -26,6 +24,7 @@ TURN_LEFT = 4
 TURN_RIGHT = 5
 TURN_AROUND = 6
 FWD_CROSS_WITHOUT_KILL = 7
+TURN_FORWARD = 8
 
 #Colour codes
 BLUE = 0
@@ -39,7 +38,7 @@ class FiniteStateNavigator:
 
         #Instantiate the route
         self.index = 0
-        self.route = ROUTE_1
+        self.route = ROUTE_2
         self.state_lock = False
 
         #Note: When the route is initialized, the car is at node 0, but unlocked
@@ -190,7 +189,10 @@ class FiniteStateNavigator:
              (curr == 9 and nex == 10) or \
              (curr == 11 and nex == 10) or \
              (curr == 14 and nex == 5) or \
-             (curr == 15 and nex == 10)) and self.state_lock == False:
+             (curr == 15 and nex == 10)) and self.state_lock == True:
+
+            #Problem:
+            # State x-9-10-True is the same as state 9-10-True. 
 
             #Tell the driver to look forward for a crosswalk
             movement = FWD_LOOK_CROSS
@@ -205,6 +207,20 @@ class FiniteStateNavigator:
             #TESTING
             print("FWD_CROSS_WITHOUT_KILL curr: {} nex: {} prev: {}".format( \
                     curr, nex, prev))
+
+        elif ((prev == 3 and curr == 4 and nex == 14) or \
+              (prev == 5 and  curr == 14 and nex == 4) or \
+              (prev == 0 and curr == 11 and nex == 15) or \
+              (prev == 10 and curr == 15 and nex == 11) or \
+              (prev == 14 and curr == 4 and nex == 3) or \
+              (prev == 5 and curr == 4 and nex == 3) or \
+              (prev == 15 and curr == 11 and nex == 0) or \
+              (prev == 10 and curr == 11 and nex == 0)) and self.state_lock == True:
+            
+            movement = TURN_FORWARD
+
+            #TESTING
+            print("TURN_FORWARD curr: {} nex: {} prev: {}".format(curr, nex, prev))
 
         elif ((prev == 2 and curr == 3 and nex == 4) or \
              (prev == 11 and curr == 0 and nex == 1) or \

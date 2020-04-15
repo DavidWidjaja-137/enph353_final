@@ -48,6 +48,7 @@ FWD_THRESH_P = 3        #to confirm a way forward, 3 vertical lines are needed
 LEFT_THRESH_P = 1
 RIGHT_THRESH_P = 1
 MID_THRESH_P = 1
+CROSSWALK_THRESHOLD = 7
 
 #Color codes
 BLUE = 0
@@ -79,6 +80,7 @@ TURN_LEFT = 4
 TURN_RIGHT = 5
 TURN_AROUND = 6
 FWD_CROSS_WITHOUT_KILL = 7
+TURN_FORWARD = 8
 
 #PID parameters
 INTEGRAL_WINDUP = 0.5
@@ -92,6 +94,7 @@ fwd_total = 0
 idk_total = 0
 mid_total = 0
 movement = FWD_LOOK_RIGHT
+previous_movement = FWD_LOOK_RIGHT
 move = Twist()
 n_turns = 0
 car_found = False
@@ -145,8 +148,7 @@ def edge_detector_p(cv_img_binary, blank_image, draw = True):
         gradients.append(gradient)
         if gradient > 0.5:
             if draw == True:
-                cv.line(blank_image, (x1,y1), (x2,y2),\
-                         (0,255,0),2)
+                cv.line(blank_image, (x1,y1), (x2,y2), (0,255,0),2)
             fwd_pt = fwd_pt + 1
 
         #If it is a horizontal line, add to the number of horizontal lines
@@ -271,6 +273,7 @@ def driver(data):
     global move
     global car_found
     global previous_image
+    global previous_movement
 
     #Obtain and crop the raw image
     cv_img_raw = bridge.imgmsg_to_cv2(data, "bgr8")
@@ -341,11 +344,8 @@ def driver(data):
 
             #Note: For a car to continue moving forward, no change in state, no
             # updating or locking, is required.
-            movement = navigator.get_current_behavior()
 
-            #TESTING
-            #movement = FWD_LOOK_NONE
-            #print("F")
+            movement = navigator.get_current_behavior()
 
         #Note: If the car is not going forward, the finite state machine has reached 
         #      a new node. So update the finite state machine, get the new behavior, and
@@ -359,13 +359,6 @@ def driver(data):
             navigator.lock_current_state()
             movement = navigator.get_current_behavior()
 
-            #TESTING
-            #movement = TURN_RIGHT
-
-            #TESTING 
-            #print("Left, Right, Forward Positions Available")
-            #print("Begin RIGHT movement")
-
         #The car can go left, back, or (maybe) forwards
         elif forward == True and left == True and right == False:
 
@@ -373,13 +366,6 @@ def driver(data):
             navigator.update_state()
             navigator.lock_current_state()
             movement = navigator.get_current_behavior()
-
-            #TESTING
-            #movement = TURN_LEFT
-        
-            #TESTING 
-            #print("Left, Forward Positions Available")
-            #print("Begin LEFT movement")
             
         #The car can go right, back or (maybe) forwards 
         elif forward == True and left == False and right == True:
@@ -389,13 +375,6 @@ def driver(data):
             navigator.lock_current_state()
             movement = navigator.get_current_behavior()
 
-            #TESTING
-            #movement = TURN_RIGHT
-
-            #TESTING
-            #print("Right, Forward positions available")
-            #print("Begin RIGHT movement")
-            
         #The car thinks it cannot go forwards, but there may be exceptions
         elif forward == False:
 
@@ -411,25 +390,18 @@ def driver(data):
 
                 movement = navigator.get_current_behavior()
 
-                #TESTING
-                #movement = FWD_LOOK_NONE
-
             #Same as forward == True and left == True and right == False
-            elif edge_points[0] >= 2 and left == True and right == False:
+            elif edge_points[0] >= 1 and left == True and right == False:
 
                 #TESTING
                 print("Warning: Vehicle detects left but is veering. ")
 
                 #Use the fsm for navigation
                 navigator.update_state()
-                navigator.lock_current_state()
                 movement = navigator.get_current_behavior()
                
-                #TESTING 
-                #movement = TURN_LEFT
-
             #Same as forward == True and left == False and right == True
-            elif edge_points[0] >= 2 and left == False and right == True:
+            elif edge_points[0] >= 1 and left == False and right == True:
 
                 #TESTING
                 print("Warning: Vehicle detects right but is veering. ")
@@ -445,11 +417,12 @@ def driver(data):
             #The car really doesnt know where it is.
             else:
 
-                #TESTING
+                print("previous_movement: {}".format(previous_movement))
                 print("Unknown Position.")
                 #print("Forward: {} Left: {} Right: {}".format(forward,left,right))
-        
                 movement = IDK
+
+        previous_movement = movement
 
     #if the vehicle is in the middle of a turn 
     else:
@@ -522,7 +495,26 @@ def driver(data):
                     #Now that the vehicle is unlocked, it is free to move forward until
                     # it reaches the next node
                     movement = navigator.get_current_behavior()
-                    
+
+                    #Note: If the current node is 6, then back up a bit. This will allow
+                    #      the car at 7 to be seen properly
+
+                    if navigator.get_current_node() == 6:
+
+                        move = Twist()
+                        move.linear.x = -0.5
+                        move.linear.y = 0.0
+                        move.angular.z = 0.0
+                        pub_vel.publish(move)
+
+                        rospy.sleep(1.0)
+
+                        move = Twist()
+                        move.linear.x = 0.0
+                        move.linear.y = 0.0
+                        move.linear.z = 0.0
+                        pub_vel.publish(move)
+
                 else:
                     
                     #TESTING
@@ -772,7 +764,9 @@ def driver(data):
             # crosswalk right in front of us. 
 
             #If a crosswalk is actually here
-            if edge_points[0] > CROSSWALK_THESHOLD:
+            cv_redmask = cv.inRange(cv_img_raw[-(IMG_HEIGHT+40):, :, :], RED_LOW, RED_HIGH)
+            redmask_sum = cv_redmask.sum()
+            if redmask_sum > 500000:
                 
                 #TESTING
                 print("A crosswalk directly ahead is detected!")
@@ -794,15 +788,23 @@ def driver(data):
                 #TESTING
                 print("Car stopped due to crosswalk")
 
-                navigator.update_state()
-                navigator.lock_current_state()
+                navigator.unlock_current_state()
 
-                previous_image = cv_img_raw
+                previous_image = cv.cvtColor(cv_img_raw, cv.COLOR_BGR2GRAY)
 
             else:
+                
+                #TESTING
+                print("Moving forward slowly..")
                
-                #Publish the old PID 
+                #move forward slowly
+                move = Twist()
+                move.linear.x = 0.3
+                move.linear.y = 0.0
+                move.angular.z = 0.0
                 pub_vel.publish(move)
+
+                #OLD: publish old PID
 
         elif movement == FWD_LOOK_NONE:
 
@@ -812,21 +814,32 @@ def driver(data):
             #Signify that the old car is no longer needed
             car_found = False
 
-        elif movmeent == FWD_CROSS_WITHOUT_KILL:
+        elif movement == FWD_CROSS_WITHOUT_KILL:
            
-            pub_vel.publish(move)
+            #pub_vel.publish(move)
 
             car_found = False
             
             #Note: At this point, the car is ready to enter the junction.
             #      Use the difference between the current and previous frame
             #      to determine if someone is on the track. 
+
+            current_img = cv.cvtColor(cv_img_raw, cv.COLOR_BGR2GRAY)
             
-            img_diff = cv.subtract(cv_img_raw, previous_image)
+            img_diff = cv.subtract(current_img, previous_image)
             img_diff_sum = img_diff.sum()
-
-            if img_diff_sum > 50000 and img_diff_sum < 150000:
-
+            print("DIFF: {}".format(img_diff_sum))
+           
+            #cv.imshow("current", current_img)
+            #cv.waitKey(1)
+            #cv.imshow("previous", previous_image) 
+            #cv.waitKey(1)
+            cv.imshow("diff", img_diff)
+            cv.waitKey(1)
+           
+            if img_diff_sum > 300000: 
+            #if img_diff_sum > 50000 and img_diff_sum < 150000:
+            
                 #TESTING
                 print("GUY ON ROAD! Car is stopped")
                 
@@ -835,16 +848,35 @@ def driver(data):
                 move.linear.y = 0.0
                 move.angular.z = 0.0
                 pub_vel.publish(move)
-
+            
             else:
                 
                 #TESTING 
                 print("Guy is not on road. Move along")
 
                 #Publish the old PID
+                move = Twist()
+                move.linear.x = 1.0
+                move.linear.y = 0.0
+                move.angular.z = 0.0
                 pub_vel.publish(move) 
 
-            previous_image = cv_img_raw
+                #1.5 seems too short
+                #2.0 is alright               
+                rospy.sleep(2.3)
+                
+                move = Twist()
+                move.linear.x = 0.0
+                move.linear.y = 0.0
+                move.angular.z = 0.0
+                pub_vel.publish(move)
+
+                print("Crosswalk crossed")
+            
+                #Unlock state
+                navigator.unlock_current_state()
+
+            previous_image = current_img
              
     #Execute semi-hardcoded subroutine to turn left.        
     elif movement == TURN_LEFT:
@@ -941,10 +973,29 @@ def driver(data):
             move.linear.y = 0.0
             move.angular.z = 0.0
             pub_vel.publish(move)        
+        
+    elif movement == TURN_FORWARD:
+        
+        print("Entering Junction: ")
+        
+        #Fully enter the junction by waiting x seconds 
+        rospy.sleep(1.25)
+        
+        #Stop the car
+        move = Twist()
+        move.linear.x = 0.0
+        move.linear.y = 0.0
+        move.angular.z = 0.0
+        pub_vel.publish(move)
+
+        print("Junction has been entered")
+
+        #Unlock the state of the car
+        navigator.unlock_current_state()
 
     elif movement == TURN_AROUND:
 
-        #TODO: figure out how to turn around
+        #Note: This is not necessary
         
         #TESTING
         print("Supposed to turn around here")
@@ -957,12 +1008,12 @@ def driver(data):
         move.linear.y = 0.0
         move.angular.z = 0.0
         pub_vel.publish(move)
-       
+         
         #TESTING 
         print("Vehicle has been stopped for safety reasons. Dumping state...")
         print("f: {} l: {} r: {} m: idk: {}".format(edge_points[0], edge_points[1], \
                     edge_points[2], edge_points[3], edge_points[4]))
-
+        
         #TESTING
         #cv.imshow('error_lines', blank_image)
         #cv.waitKey(1)
@@ -986,50 +1037,48 @@ def observer(data):
     global movement
     global previous_image
     
-    #Obtain and crop the original image
-    cv_img = bridge.imgmsg_to_cv2(data, "bgr8")
-    cv_img_upper = cv_img
-    cv_img = cv_img[-IMG_HEIGHT:, :, :]
-    
-    #grayscale, filter and threshold the original image
-    cv_img_gray = cv.cvtColor(cv_img_upper, cv.COLOR_BGR2GRAY)
+    #Obtain and crop the raw image
+    cv_img_raw = bridge.imgmsg_to_cv2(data, "bgr8")
+    cv_img = cv_img_raw[-IMG_HEIGHT:, :, :]
+
+    #Apply greyscale, averaging, and thresholding to get binary image
+    cv_img_gray = cv.cvtColor(cv_img, cv.COLOR_BGR2GRAY)
     kernel = np.ones((5,5), np.float32)/25
     cv_img_gray = cv.filter2D(cv_img_gray,-1,kernel)
     retval, cv_img_binary = cv.threshold(cv_img_gray, BINARY_THRESH, 255, cv.THRESH_BINARY)
-    
+
     #Instantiate a blank array for illustration purposes
-    #blank_image = np.zeros((IMG_HEIGHT, IMG_WIDTH, 3), np.uint8)
-     
+    blank_image = np.zeros((IMG_HEIGHT, IMG_WIDTH, 3), np.uint8)
+    
     #Obtain edges to determine current position on board
-    #edge_points, blank_image = edge_detector_p(cv_img_binary, blank_image)
-        
+    edge_points, blank_image = edge_detector_p(cv_img_binary, blank_image)
+
     #cv_img_side = cv_img_upper[:, 0:200, :]
     #cv_img_side = cv_img_upper[:, -200:, :]
     #cv_img_side = cv_img_upper[:, -200:, :]
     
     #check_for_car(cv_img_side)
-    #cv.imshow("edges", blank_image)
-    #cv.waitKey(1)
+    cv.imshow("edges", blank_image)
+    cv.waitKey(1)
     #cv.imshow("side", cv_img_side)
     #cv.waitKey(1)
      
     #Note, I'm going to try taking 2 greyscale images and doing bitwise and
     #If the bitwise and is sufficiently different, then clearly something is moving
-
-    difference = cv.subtract(cv_img_gray, previous_image)
-
-    summa = difference.sum()
-
-    if (summa > 70000 and summa < 150000):
-        print("guy is here")
     
-    cv.imshow("img", cv_img_gray)
-    cv.waitKey(1)
+    #difference = cv.subtract(cv_img_gray, previous_image)
+    #summa = difference.sum()
+    
+    #if (summa > 70000 and summa < 150000):
+    #    print("guy is here")
+    
+    #cv.imshow("img", cv_img_gray)
+    #cv.waitKey(1)
+    
+    #cv.imshow("diff", difference) 
+    #cv.waitKey(1)
 
-    cv.imshow("diff", difference) 
-    cv.waitKey(1)
-
-    previous_image = cv_img_gray
+    #previous_image = cv_img_gray
 
 
 #Initialize the node

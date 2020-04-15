@@ -58,7 +58,3 @@ If the car is no longer there
     Keep the flag to False. The car can now use SIFT again
 
 
-
-
-
-
