@@ -66,7 +66,7 @@ BLUE_HIGH = np.array([240,40,40])
 #Color Thresholds
 YG_THRESHOLD = 3000000
 BLUE_THRESHOLD = 4500000
-YG_THRESHOLD_LOW = 500000
+YG_THRESHOLD_LOW = 1000000
 BLUE_THRESHOLD_LOW = 500000
 #BLUE_THRESHOLD = 5500000
 
@@ -100,7 +100,7 @@ n_turns = 0
 car_found = False
 previous_image = np.zeros((480, 640), np.uint8)
 
-turn_thresh = [20, 15, 20, 18]
+turn_thresh = [20, 15, 20, 15]
 
 
 #Counts the number and type of edges in the given image
@@ -345,6 +345,11 @@ def driver(data):
             #Note: For a car to continue moving forward, no change in state, no
             # updating or locking, is required.
 
+            if previous_movement == TURN_FORWARD or \
+               previous_movement == FWD_LOOK_CROSS: #Note this will only happen if unlocked
+                navigator.update_state()
+                navigator.lock_current_state()
+
             movement = navigator.get_current_behavior()
 
         #Note: If the car is not going forward, the finite state machine has reached 
@@ -387,6 +392,11 @@ def driver(data):
                 print("Warning: Vehicle moving forward but veering. ")
 
                 forward = True
+    
+                if previous_movement == TURN_FORWARD or \
+                   previous_movement == FWD_LOOK_CROSS:
+                    navigator.update_state()
+                    navigator.lock_current_state()
 
                 movement = navigator.get_current_behavior()
 
@@ -398,6 +408,7 @@ def driver(data):
 
                 #Use the fsm for navigation
                 navigator.update_state()
+                navigator.lock_current_state()
                 movement = navigator.get_current_behavior()
                
             #Same as forward == True and left == False and right == True
@@ -417,10 +428,26 @@ def driver(data):
             #The car really doesnt know where it is.
             else:
 
-                print("previous_movement: {}".format(previous_movement))
-                print("Unknown Position.")
-                #print("Forward: {} Left: {} Right: {}".format(forward,left,right))
-                movement = IDK
+                if previous_movement == FWD_LOOK_CROSS:
+                    navigator.update_state()
+                    navigator.lock_current_state()
+                    movement = navigator.get_current_behavior()
+                elif previous_movement == FWD_CROSS_WITHOUT_KILL:
+                    movement = navigator.get_current_behavior()
+                elif previous_movement == FWD_LOOK_NONE and \
+                     navigator.get_current_node() == 10:
+                    movement = navigator.get_current_behavior()
+                elif previous_movement == FWD_LOOK_NONE and \
+                     navigator.get_current_node() == 9:
+                    navigator.update_state()
+                    navigator.lock_current_state()
+                    movement = navigator.get_current_behavior()
+                else:
+                    #movement = navigator.get_current_behavior()
+                    print("previous_movement: {}".format(previous_movement))
+                    print("Unknown Position.")
+                    #print("Forward: {} Left: {} Right: {}".format(forward,left,right))
+                    movement = IDK
 
         previous_movement = movement
 
@@ -471,8 +498,14 @@ def driver(data):
                 #evaluate whether the turn is really complete with stricter conditions 
                 #For Turn 0, the threshold seems to be 20
                 #For Turn 1, the threshold seems to be 15
-                if fwd_total >= turn_thresh[n_turns % 4] and idk_total == 0 \
-                    and mid_total == 0 and redmask_sum < 500000:
+
+                #Note: If the current turn is 9, don't redmask sum, because you actually
+                #      want to turn into the crosswalk
+                # TODO: Adapt this for future turns
+                if (fwd_total >= turn_thresh[n_turns % 4] or \
+                     (navigator.get_current_node() == 9 and redmask_sum > 2000000))\
+                     and idk_total == 0 and mid_total == 0 and \
+                     (navigator.get_current_node() == 9 or redmask_sum < 500000):
            
                     #TESTING 
                     print("Turn {} Complete".format(n_turns))
@@ -508,6 +541,23 @@ def driver(data):
                         pub_vel.publish(move)
 
                         rospy.sleep(1.0)
+
+                        move = Twist()
+                        move.linear.x = 0.0
+                        move.linear.y = 0.0
+                        move.linear.z = 0.0
+                        pub_vel.publish(move)
+
+                    elif navigator.get_current_node() == 0:
+
+                        move = Twist()
+                        move.linear.x = -0.5
+                        move.linear.y = 0.0
+                        move.angular.z = 0.0
+                        pub_vel.publish(move)
+
+                        #1.0 might be too much
+                        rospy.sleep(0.5)
 
                         move = Twist()
                         move.linear.x = 0.0
@@ -699,10 +749,6 @@ def driver(data):
 
                 print("A car was detected on the right")
 
-                #TESTING
-                #cv.imshow("car detected here", check_img)
-                #Jcv.waitKey(1)
-
                 #This means that the vehicle is in a position to read for a car
                 new_state = navigator.update_state()
                 navigator.lock_current_state()
@@ -770,7 +816,7 @@ def driver(data):
                 
                 #TESTING
                 print("A crosswalk directly ahead is detected!")
-
+                
                 rospy.sleep(0.5)
                
                 #TESTING
@@ -863,7 +909,8 @@ def driver(data):
 
                 #1.5 seems too short
                 #2.0 is alright               
-                rospy.sleep(2.3)
+                #2.3 was a bit too long
+                rospy.sleep(1.75)
                 
                 move = Twist()
                 move.linear.x = 0.0
