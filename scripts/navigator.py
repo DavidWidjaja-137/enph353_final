@@ -10,11 +10,10 @@ import numpy as np
 
 #Possible routes
 ROUTE_1 = [0, 1, 2, 3, 4, 12, 11]
+ROUTE_3 = [0, 1, 2, 3, 4, 12, 11, 0, 1, 2, 3, 4, 14, 5, 6, 7, 8]
 
 #Currently Impossible routes
 ROUTE_2 = [0, 1, 2, 3, 4, 14, 5, 6, 7, 8, 9, 10, 15, 11]
-
-ROUTE_3 = [0, 1, 2, 3, 4, 12, 11, 0, 1, 2, 3, 4, 14, 5, 6, 7, 8]
 
 #Movement Codes
 IDK = -1
@@ -80,6 +79,10 @@ class FiniteStateNavigator:
         print("state unlocked")
 
         self.state_lock = False
+
+    def is_state_locked(self):
+
+        return self.state_lock
 
     #Update the position of the node
     def update_state(self):

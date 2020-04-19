@@ -173,7 +173,7 @@ def edge_detector_p(cv_img_binary, blank_image, draw = True):
             idk_pt = idk_pt + 1
    
     #TESTING 
-    print("f:{},l:{},r:{},m:{},idk:{}".format(fwd_pt,left_pt,right_pt,middle_pt,idk_pt))
+    #print("f:{},l:{},r:{},m:{},idk:{}".format(fwd_pt,left_pt,right_pt,middle_pt,idk_pt))
     
     return ((fwd_pt, left_pt, right_pt, middle_pt, idk_pt), blank_image) 
 
@@ -425,6 +425,17 @@ def driver(data):
                 #TESTING 
                 #movement = RIGHT 
 
+            #Same as forward == True and left == True and right == True
+            elif edge_points[0] >= 1 and left == True and right == True:
+
+                #TESTING
+                print("Warning: Vehicle detects leftright but is veering. ")
+
+                #Use the fsm for navigation
+                navigator.update_state()
+                navigator.lock_current_state()
+                movement = navigator.get_current_behavior()
+
             #The car really doesnt know where it is.
             else:
 
@@ -443,11 +454,16 @@ def driver(data):
                     navigator.lock_current_state()
                     movement = navigator.get_current_behavior()
                 else:
-                    #movement = navigator.get_current_behavior()
                     print("previous_movement: {}".format(previous_movement))
-                    print("Unknown Position.")
-                    #print("Forward: {} Left: {} Right: {}".format(forward,left,right))
+                    print("Unknown Position. Stopping Vehicle")
                     movement = IDK
+
+        #Cheating a bit to ensure that the car doesnt fall off
+        #Some parts of the track are a bit awkward
+        if navigator.is_state_locked() == False and navigator.get_current_node() == 5:
+            navigator.update_state()
+            navigator.lock_current_state()
+            movement = navigator.get_current_behavior()
 
         previous_movement = movement
 
@@ -532,6 +548,7 @@ def driver(data):
                     #Note: If the current node is 6, then back up a bit. This will allow
                     #      the car at 7 to be seen properly
 
+                    #TODO: Decide if this is right or not
                     if navigator.get_current_node() == 6:
 
                         move = Twist()
@@ -548,7 +565,7 @@ def driver(data):
                         move.linear.z = 0.0
                         pub_vel.publish(move)
 
-                    elif navigator.get_current_node() == 0:
+                    if navigator.get_current_node() == 0:
 
                         move = Twist()
                         move.linear.x = -0.5
@@ -583,9 +600,6 @@ def driver(data):
         #Note: A car moving forward will either encounter a turn, a car or a crosswalk
         # If it is a crosswalk, then a new flag system must be devised to handle it
 
-        #TESTING
-        #print("executing PID")
-         
         #sum the thresholded image to reduce random error
         row = []
         for i in range(IMG_WIDTH):
@@ -652,8 +666,6 @@ def driver(data):
          
         move.angular.z = proportional_response + differential_response + integral_response
              
-        #pub_vel.publish(move)
-         
         previous_error = error
 
         #Note: Now that the PID is settled, search for features on the track
@@ -672,10 +684,6 @@ def driver(data):
             if current_car_found is True and car_found == False:
 
                 print("A car was detected on the left")
-
-                #TESTING
-                #cv.imshow("car detected here", check_img)
-                #cv.waitKey(1)
 
                 #This means that the vehicle is in a position to read for a car
                 new_state = navigator.update_state()
@@ -910,18 +918,29 @@ def driver(data):
                 #1.5 seems too short
                 #2.0 is alright               
                 #2.3 was a bit too long
-                rospy.sleep(1.75)
-                
-                move = Twist()
-                move.linear.x = 0.0
-                move.linear.y = 0.0
-                move.angular.z = 0.0
-                pub_vel.publish(move)
+                #rospy.sleep(1.75)
+                #rospy.sleep(1.5)
+                rospy.sleep(1.0)
+               
+                #TODO 
+                #I see the problem. THe car exits state 5. 
+                #It does not immediately go to state 6.
+                #First, it goes to the edge between 5 and 6, where it first
+                #tries to detect a turn, which will be difficult to succeed
+                #Cheat the system, if the car is supposed to go FWD_LOOK_NONE, but the
+                #current state is 5, just update it directly to 6.
+ 
+                #move = Twist()
+                #move.linear.x = 0.0
+                #move.linear.y = 0.0
+                #move.angular.z = 0.0
+                #pub_vel.publish(move)
 
                 print("Crosswalk crossed")
             
                 #Unlock state
                 navigator.unlock_current_state()
+
 
             previous_image = current_img
              
@@ -1061,14 +1080,6 @@ def driver(data):
         print("f: {} l: {} r: {} m: idk: {}".format(edge_points[0], edge_points[1], \
                     edge_points[2], edge_points[3], edge_points[4]))
         
-        #TESTING
-        #cv.imshow('error_lines', blank_image)
-        #cv.waitKey(1)
-       
-        #TESTING 
-        #cv.imshow('error_raw', cv_img)
-        #cv.waitKey(1)
-
         while True:
             continue
 
@@ -1155,7 +1166,6 @@ move.linear.z = 0.0
 move.angular.x = 0.0
 move.angular.y = 0.0
 move.angular.z = 0.0
-#move.angular.z = 0.50
 pub_vel.publish(move)
 
 rospy.sleep(0.30)
