@@ -730,7 +730,13 @@ def driver(data):
                     print("Image could not be obtained at node {}".format(new_state))
                     cv.imshow("Failed SIFT at node {}".format(new_state), check_img)
                     cv.waitKey(1)
-                 
+
+                imname = "/home/david/test{}.png".format(new_state)
+                retval = cv.imwrite(imname, check_img)
+                if retval is True:
+                    print("IMG SAVED")
+                else:
+                    print("IMG NOT SAVED")
 
                 #TODO: Call NN code to read the license plate
 
@@ -789,11 +795,11 @@ def driver(data):
                     else:
                         max_y = len(check_img)
                         
-                    cropped_image = check_img[min_y:max_y, edges[0][0]:edges[1][0], :]
+                    check_img = check_img[min_y:max_y, edges[0][0]:edges[1][0], :]
     
                     #TESTING
                     print("Image successfully obtained at node {}".format(new_state))
-                    cv.imshow("SIFT output at node {}".format(new_state), cropped_image)
+                    cv.imshow("SIFT output at node {}".format(new_state), check_img)
                     cv.waitKey(1)
 
                 else:
@@ -802,7 +808,13 @@ def driver(data):
                     print("Image could not be obtained at node {}".format(new_state))
                     cv.imshow("Failed SIFT at node {}".format(new_state), check_img)
                     cv.waitKey(1)
-                    
+                
+                imname = "/home/david/test{}.png".format(new_state)
+                retval = cv.imwrite(imname, check_img)
+                if retval is True:
+                    print("IMG SAVED")
+                else:
+                    print("IMG NOT SAVED")  
                  
                 #TODO: Call NN code to read the license plate
 
