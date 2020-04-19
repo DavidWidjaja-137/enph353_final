@@ -64,11 +64,16 @@ BLUE_LOW = np.array([0,0,0])
 BLUE_HIGH = np.array([240,40,40])
 
 #Color Thresholds
-YG_THRESHOLD = 3000000
+#YG_THRESHOLD = 3000000
 BLUE_THRESHOLD = 4500000
-YG_THRESHOLD_LOW = 1000000
+#YG_THRESHOLD_LOW = 1000000
 BLUE_THRESHOLD_LOW = 500000
 #BLUE_THRESHOLD = 5500000
+
+YG_THRESHOLD_1 = 4500000
+YG_THRESHOLD_LOW_1 = 4000000
+YG_THRESHOLD_2 = 3000000
+YG_THRESHOLD_LOW_2 = 1000000
 
 # Movement Codes
 IDK = -1
@@ -248,6 +253,13 @@ def check_for_car(img, car_colour):
         #TESTING
         print("Checking for YELLOWGREEN car: {}".format(yg_sum))
 
+        if navigator.get_current_node() == 14 or navigator.get_current_node() == 12:
+            YG_THRESHOLD = YG_THRESHOLD_1
+            YG_THRESHOLD_LOW = YG_THRESHOLD_LOW_1
+        else:
+            YG_THRESHOLD = YG_THRESHOLD_2
+            YG_THRESHOLD_LOW = YG_THRESHOLD_LOW_2
+            
         if yg_sum > YG_THRESHOLD:
             print("There is a YELLOWGREEN car here")
             return True
