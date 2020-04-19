@@ -107,7 +107,6 @@ previous_image = np.zeros((480, 640), np.uint8)
 
 turn_thresh = [20, 15, 20, 15]
 
-
 #Counts the number and type of edges in the given image
 # cv_img_binary: greyscale opencv image, bgr color
 # blank_image: image to draw lines on
@@ -718,11 +717,11 @@ def driver(data):
                     else:
                         max_y = len(check_img)
                         
-                    cropped_image = check_img[min_y:max_y, edges[0][0]:edges[1][0], :]
+                    check_img = check_img[min_y:max_y, edges[0][0]:edges[1][0], :]
     
                     #TESTING
                     print("Image successfully obtained at node {}".format(new_state))
-                    cv.imshow("SIFT output at node {}".format(new_state), cropped_image)
+                    cv.imshow("SIFT output at node {}".format(new_state), check_img)
                     cv.waitKey(1)
 
                 else:

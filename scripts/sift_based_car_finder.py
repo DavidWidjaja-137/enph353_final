@@ -19,7 +19,8 @@ import numpy as np
 #0.5 is okay
 #0.45 is too low
 #0.4 is too low
-FILTER_MATCH_THRESHOLD = 0.5
+#FILTER_MATCH_THRESHOLD = 0.5
+FILTER_MATCH_THRESHOLD = 0.7
 #0.8 too high for yellow
 #0.7 is okay-ish
 #0.5 too low for yellow
@@ -35,8 +36,8 @@ GREEN = 1
 YELLOW = 2
 
 #Homography Thresholds
-HOM_LOW = 50
-HOM_HIGH = 150
+HOM_LOW = 25
+HOM_HIGH = 175
 
 class SIFTBasedCarFinder:
 
@@ -137,6 +138,9 @@ class SIFTBasedCarFinder:
         
             #if no homography can be found
             if matrix is None:
+                
+                print("SCENARIO 1 HAPPENED")
+                print("DUMP: {}".format(query_pts))
 
                 return None
                 #TESTING
@@ -170,10 +174,14 @@ class SIFTBasedCarFinder:
                         min_y = dst[i][0][1]
 
                 if max_x - min_x < HOM_LOW or max_x - min_x > HOM_HIGH:
+
+                    print("SCENARIO 2 HAPPENED")
                     return None
                     #TESTING
                     #return (target_gray, output_matches)
                 elif max_y - min_y < HOM_LOW or max_y - min_y > HOM_HIGH:
+                    
+                    print("SCENARIO 3 HAPPENED")
                     return None
                     #TESTING
                     #return (target_gray, output_matches)
@@ -185,7 +193,13 @@ class SIFTBasedCarFinder:
                     #homography = cv.polylines(target_gray, [np.int32(dst)], True, (255, 0, 0), 3)
                     #return (homography, output_matches)
         else:
-
+            
+            train_pts = np.float32([kp_target[m.trainIdx].pt \
+                                                 for m in good_pts]).reshape(-1,1,2)
+             
+            print("SCENARIO 4 HAPPENED")
+            print("DUMP: {}".format(train_pts))
+            
             return None
             #TESTING
             #return (target_gray, output_matches)

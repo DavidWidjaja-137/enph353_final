@@ -17,6 +17,9 @@ ROUTE_4 = [0, 1, 2, 3, 4, 12, 16, 11, 0, 1, 2, 3, 4, 14, 5, 6, 7, 9]
 #Currently Impossible routes
 ROUTE_2 = [0, 1, 2, 3, 4, 14, 5, 6, 7, 8, 9, 10, 15, 11]
 
+ROUTE_X = [0, 1, 2, 3, 4, 12, 16, 11, 13, 4, 14, 5, 6, 7, 8, 9]
+ROUTE_X2 = [0, 1, 2, 3, 4, 12, 16, 11, 13, 4, 3, 4, 14, 5, 6, 7, 8, 9]
+
 #Movement Codes
 IDK = -1
 FWD_LOOK_LEFT = 0
@@ -41,7 +44,7 @@ class FiniteStateNavigator:
 
         #Instantiate the route
         self.index = 0
-        self.route = ROUTE_4
+        self.route = ROUTE_X2
         self.state_lock = False
 
         #Note: When the route is initialized, the car is at node 0, but unlocked
@@ -290,10 +293,18 @@ class FiniteStateNavigator:
              (prev == 16 and curr == 11 and nex == 13)) and self.state_lock == True:
                
             #Tell the driver to do a 180 turn 
-            movement = TURN_AROUND
+            #movement = TURN_AROUND
+
+            #Tell the driver to turn left. This will ensure that the car does a U-turn
+            movement = TURN_LEFT
 
             #TESTING
             print("TURN_AROUND curr: {} nex: {} prev: {}".format(curr, nex, prev))
+
+        elif ((prev == 4 and curr == 3 and nex == 4)) and self.state_lock == True:
+
+            #Tell the driver to turn right. This will ensure that the car does a U-turn
+            movement = TURN_RIGHT
 
         else:
            
