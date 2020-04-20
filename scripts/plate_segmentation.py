@@ -2,6 +2,7 @@ import cv2
 import os
 import numpy as np
 import statistics as sts
+from matplotlib import pyplot as plt
 
 class PlateSegmentator:
 
@@ -57,6 +58,9 @@ class PlateSegmentator:
                     for j in range(h):
                         pix_sum += img[j,i]
                     pix_vals.append(pix_sum/h)
+                # print("we be plotting")
+                # plt.plot(range(w), pix_vals)
+                # plt.show()
         
 
             ''' 
@@ -119,6 +123,7 @@ class PlateSegmentator:
         This is just where the image is segmented. 
         test_img = image to be segmented
         returns a list of images containing the individual characters
+            in form [[ [ [parking], [numbers]],[[plate], [number]]]] (sorry)
         '''
         # test_img = cv2.imread(SOMTHING PASSED IN HERE)
 
@@ -127,14 +132,16 @@ class PlateSegmentator:
 
         # split into strips vertically
         chunks = self.split_images(grey_img_list, horizontal=False, min_len=25)
-
+        
         # 1D list of all vertical strips
         new_images = []
 
         for i in range(len(chunks)):
             for chunk in chunks[i]:
                 new_images.append(grey_img_list[i][:, chunk[0]:chunk[1]])
-
+        
+        if len(new_images) == 0:
+            new_images.append(grey_img_list[i])
 
         # now split each chunk horizontally
             
@@ -166,6 +173,8 @@ class PlateSegmentator:
                 for chunk in chunks_3[j]:
                     count += 1
                     temp = plate_pairs[i][j][:, chunk[0]:chunk[1]]
+                    temp = cv2.resize(temp, (30,90))
+                    temp = cv2.cvtColor(temp, cv2.COLOR_GRAY2BGR)
                     split_plates[i][j].append(temp)
             
         

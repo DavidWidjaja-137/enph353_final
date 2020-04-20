@@ -32,7 +32,6 @@ class PlateCNN:
         self.picklefile = picklefile
         self.to_picklefile = to_picklefile
 
-        # TODO: read pickle to get cnn
         if self.picklefile is not None:
             print("Reading pickle file")
             # open and read from pickle file
@@ -62,6 +61,8 @@ class PlateCNN:
             self.conv_model.compile(loss='categorical_crossentropy',
                             optimizer=optimizers.RMSprop(lr=LEARNING_RATE),
                             metrics=['acc'])
+        
+        self.conv_model.summary()
   
 
     def train(self, num_epochs=10):
@@ -174,6 +175,18 @@ class PlateCNN:
 
     def get_summary(self):
         self.conv_model.summary()
+
+    def predict_chars(self, list_of_images):
+        # run images thru cnn
+        im_l = np.array(list_of_images)
+        pred_vals = self.conv_model.predict(im_l)
+        pred_indices = np.argmax(pred_vals, axis=1)
+
+        # pred_labels = []
+        # for i in pred_vals:
+        #     pred_labels.append(self.l_ar[i])
+        pred_labels = [self.l_ar[i] for i in pred_indices]
+        return pred_labels
 
 if __name__ == '__main__':
     # train cnn here
