@@ -18,11 +18,16 @@ class PlateReader:
         self.cnn = PlateCNN(picklefile=pickle_file)
     
     def read_plate(self, plate_img):
+
         # segment plate
-        print("reading plate")
+
+        #TEST
+        print("cnn reading plate")
+
         list_of_num_sets = self.segmentator.segment_plate(plate_img)
 
-        print("num sets len: {}".format(len(list_of_num_sets)))
+        #TEST
+        #print("num sets len: {}".format(len(list_of_num_sets)))
 
         pred_vals = []
         pred_strings = []
@@ -44,8 +49,14 @@ class PlateReader:
                 
                 if st != '':
                     pred_strings[i].append(st)
-        
+       
+            #TEST 
             print(pred_strings[i])
+
+        print("PredStrings: {}".format(pred_strings))
+        print("PredVals: {}".format(pred_vals))
+
+        return (pred_vals, pred_strings)
 
 
 if __name__ == '__main__':
@@ -58,11 +69,4 @@ if __name__ == '__main__':
     
 
     pr.read_plate(img)
-
-
-
-
-
-
-    
 

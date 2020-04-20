@@ -9,6 +9,8 @@
 import random
 import time
 import sys
+import pickle
+import os
 
 import cv2 as cv
 import numpy as np
@@ -22,7 +24,7 @@ from geometry_msgs.msg import Twist
 #local modules
 import sift_based_car_finder
 import navigator
-#import hough_based_car_finder
+import plate_recognition
 
 #Robot Camera Parameters
 IMG_WIDTH = 640
@@ -64,11 +66,8 @@ BLUE_LOW = np.array([0,0,0])
 BLUE_HIGH = np.array([240,40,40])
 
 #Color Thresholds
-#YG_THRESHOLD = 3000000
 BLUE_THRESHOLD = 4500000
-#YG_THRESHOLD_LOW = 1000000
 BLUE_THRESHOLD_LOW = 500000
-#BLUE_THRESHOLD = 5500000
 
 YG_THRESHOLD_1 = 4500000
 YG_THRESHOLD_LOW_1 = 4000000
@@ -104,6 +103,8 @@ move = Twist()
 n_turns = 0
 car_found = False
 previous_image = np.zeros((480, 640), np.uint8)
+
+license_plates = []
 
 #turn_thresh = [20, 15, 20, 15]
 turn_thresh = [20, 15, 20, 15, 20, 15]
@@ -286,6 +287,8 @@ def driver(data):
     global car_found
     global previous_image
     global previous_movement
+
+    global license_plates
 
     #Obtain and crop the raw image
     cv_img_raw = bridge.imgmsg_to_cv2(data, "bgr8")
@@ -740,18 +743,24 @@ def driver(data):
                     cv.imshow("Failed SIFT at node {}".format(new_state), check_img)
                     cv.waitKey(1)
 
-                #Verification Image Set Generation
-                imname = "/home/david/test{}.png".format(new_state)
-                retval = cv.imwrite(imname, check_img)
-                if retval is True:
-                    print("IMG SAVED")
-                else:
-                    print("IMG NOT SAVED")
+                #imname = "/home/david/test{}.png".format(new_state)
+                #retval = cv.imwrite(imname, check_img)
+                #if retval is True:
+                #    print("IMG SAVED")
+                #else:
+                #    print("IMG NOT SAVED")  
+                 
+                #Call NN code to read the license plate
+                
+                try:
+                    pred_vals, pred_strings = plate_reader.read_plate(check_img)
 
-                #TODO: Call NN code to read the license plate
-
-                #TODO: Check that the output of the NN is satisfactory before moving on
-                #       Otherwise, repeat the steps above
+                    license_plate_pair = pred_strings[0][0] + pred_strings[0][1]
+                except:
+                    print("ERROR: CNN did not work properly")
+                    license_plate_pair = ""
+                license_plates.append(license_plate_pair)
+        
                 navigator.unlock_current_state()
 
                 #Note: Now that a car was found, the same car should not be found again
@@ -819,17 +828,24 @@ def driver(data):
                     cv.imshow("Failed SIFT at node {}".format(new_state), check_img)
                     cv.waitKey(1)
                 
-                imname = "/home/david/test{}.png".format(new_state)
-                retval = cv.imwrite(imname, check_img)
-                if retval is True:
-                    print("IMG SAVED")
-                else:
-                    print("IMG NOT SAVED")  
+                #imname = "/home/david/test{}.png".format(new_state)
+                #retval = cv.imwrite(imname, check_img)
+                #if retval is True:
+                #    print("IMG SAVED")
+                #else:
+                #    print("IMG NOT SAVED")  
                  
-                #TODO: Call NN code to read the license plate
+                #Call NN code to read the license plate
+                
+                try:
+                    pred_vals, pred_strings = plate_reader.read_plate(check_img)
 
-                #TODO: Check that the output of the NN is satisfactory before moving on
-                #        Otherwise, repeat the steps above
+                    license_plate_pair = pred_strings[0][0] + pred_strings[0][1]
+                except:
+                    print("ERROR: CNN did not work properly")
+                    license_plate_pair = ""
+                license_plates.append(license_plate_pair)
+        
                 navigator.unlock_current_state()
 
                 #Note: Now that a car was found, the same car should not be found again
@@ -1116,6 +1132,8 @@ def driver(data):
         print("##############") 
         print("## D O N E  ##")
         print("##############")
+        print("## LICENSE PLATES: {}".format(license_plates))
+        print("##############")
         
         while True:
             continue
@@ -1191,6 +1209,10 @@ car_finder = sift_based_car_finder.SIFTBasedCarFinder()
 
 #Initialize the finite state machine navigator
 navigator = navigator.FiniteStateNavigator()
+
+#Initialize the License Plate Reader
+pickle_path = os.path.dirname(os.path.realpath(__file__)) +  "/"
+plate_reader = plate_recognition.PlateReader(pickle_path+"defaultpickle.pickle")
 
 #Delay for observation purposes
 rospy.sleep(10)

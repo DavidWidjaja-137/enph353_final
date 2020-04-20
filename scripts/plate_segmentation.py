@@ -81,7 +81,8 @@ class PlateSegmentator:
                         if j % (i+1) == 0:
                             pix_vals_temp[j] += 1
             
-            space_thresh = mode_val - abs(mode_val-avg_val)*(255-avg_val)*(255-avg_val)*(255-avg_val)*avg_mod/(255*255*255)
+            space_thresh = mode_val - abs(mode_val-avg_val)*(255-avg_val)*(255-avg_val) \
+                            *(255-avg_val)*avg_mod/(255*255*255)
 
             temp = []
             i = 0
@@ -101,8 +102,10 @@ class PlateSegmentator:
                     check if the chunk is very small. if it is, then
                     keep the starting position and keep going 
                     '''      
-                    if(abs(start-i) > 5):  # if its really short, keep going (assume its stopping too early)
-                        if(abs(start-i) > min_len): # throw away anything that isn't above minimum length
+                    if(abs(start-i) > 5):  # if its really short, keep going
+                                           #   (assume its stopping too early)
+                        if(abs(start-i) > min_len): # throw away anything that isn't 
+                                                    #   above minimum length
                             temp.append([start, i])
                         keep_going = False
                         
@@ -158,7 +161,8 @@ class PlateSegmentator:
 
         # now take each pair of license plates and vertically split them again
 
-        # each split_plates[i] should contain two lists, one of the parking spot (size 2) and one of the plate (size 4)
+        # each split_plates[i] should contain two lists, one of the parking spot (size 2)
+        #  and one of the plate (size 4)
         split_plates = []
 
         for i in range(len(plate_pairs)):
