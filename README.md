@@ -2,6 +2,8 @@
 
 This is a simulation environment designed to match the real competition environment. You do not need to use it, though it might be helpful to test ideas and train control models.
 
+Note: Instructions were changed by David to reflect the current state of this repository.
+
 ## Installation instructions:
 * If you **do not** have a catkin workspace, please create one. You can use any folder to create it in. The example below uses your home directory.
 ```
@@ -11,7 +13,12 @@ mkdir -p ~/353_ws/src
 * Clone the repository into the catkin workspace src folder.
 ```
 cd ~/353_ws/src
-git clone https://github.com/ENPH353/competition_2019t2.git
+git clone https://github.com/DavidWidjaja-137/enph353_final.git
+```
+
+* Rename the module to ensure everything builds properly
+```
+mv enph353_final competition_2019t2
 ```
 
 * Build the packages
