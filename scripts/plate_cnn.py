@@ -54,7 +54,8 @@ class PlateCNN:
             self.conv_model.add(layers.Flatten())
             self.conv_model.add(layers.Dropout(0.5))
             self.conv_model.add(layers.Dense(512, activation='relu'))
-            self.conv_model.add(layers.Dense(37, activation='softmax'))  # at least i think it is num labels
+            self.conv_model.add(layers.Dense(37, activation='softmax'))  
+            # at least i think it is num labels
 
             # sets learning rate of model, and also type
             LEARNING_RATE = 1e-4
@@ -69,7 +70,8 @@ class PlateCNN:
         [X,Y] = self.generate_train_data()
         [X_v, Y_v] = self.generate_val_data()
 
-        history_conv = self.conv_model.fit(X, Y, validation_data=(X_v,Y_v), epochs=num_epochs, batch_size=32)
+        history_conv = self.conv_model.fit(X, Y, validation_data=(X_v,Y_v), \
+                                             epochs=num_epochs, batch_size=32)
 
         # save the new weights in given pickle file
         self.write_pickle()
@@ -107,7 +109,8 @@ class PlateCNN:
         
 
         # these take the images from the directories and augment them
-        train_generator = train_datagen.flow_from_directory(self.pic_path+"train", target_size=(90,30), batch_size=113)
+        train_generator = train_datagen.flow_from_directory(self.pic_path+"train",\
+                                                         target_size=(90,30), batch_size=113)
         # print("TRAIN GENERATOR LEN = {}".format(train_generator.__len__()))
         
         X = []
@@ -137,7 +140,8 @@ class PlateCNN:
         # same thing for validation data
         # TODO: need to get directory path or smth
         val_datagen = ImageDataGenerator()
-        val_generator = val_datagen.flow_from_directory(self.pic_path+"val", target_size=(90,30), batch_size=283)
+        val_generator = val_datagen.flow_from_directory(self.pic_path+"val",\
+                                                         target_size=(90,30), batch_size=283)
 
         X_v = []
         Y_v = []

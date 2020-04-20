@@ -9,11 +9,18 @@
 import numpy as np
 
 #Possible routes
-ROUTE_1 = [0, 1, 2, 3, 4, 12, 11]
+ROUTE_1 = [0, 1, 2, 3, 4, 12, 16, 11]
 ROUTE_3 = [0, 1, 2, 3, 4, 12, 11, 0, 1, 2, 3, 4, 14, 5, 6, 7, 8]
+
+ROUTE_4 = [0, 1, 2, 3, 4, 12, 16, 11, 0, 1, 2, 3, 4, 14, 5, 6, 7, 9]
 
 #Currently Impossible routes
 ROUTE_2 = [0, 1, 2, 3, 4, 14, 5, 6, 7, 8, 9, 10, 15, 11]
+
+ROUTE_X = [0, 1, 2, 3, 4, 12, 16, 11, 13, 4, 14, 5, 6, 7, 8, 9]
+ROUTE_X2 = [0, 1, 2, 3, 4, 12, 16, 11, 13, 4, 3, 4, 14, 5, 6, 7, 8, 9]
+
+ROUTE_X3 = [0, 1, 2, 3, 4, 14, 5, 6, 7, 8, 9]
 
 #Movement Codes
 IDK = -1
@@ -39,7 +46,7 @@ class FiniteStateNavigator:
 
         #Instantiate the route
         self.index = 0
-        self.route = ROUTE_3
+        self.route = ROUTE_X2
         self.state_lock = False
 
         #Note: When the route is initialized, the car is at node 0, but unlocked
@@ -160,7 +167,8 @@ class FiniteStateNavigator:
 
         #Transition between nodes
         elif ((curr == 11 and nex == 13) or \
-             (curr == 4 and nex == 12)) and self.state_lock == False:
+             (curr == 4 and nex == 12) or \
+             (curr == 12 and nex == 16)) and self.state_lock == False:
 
             #Tell the driver to look left for a car while moving forward
             movement = FWD_LOOK_LEFT
@@ -183,7 +191,7 @@ class FiniteStateNavigator:
              (curr == 9 and nex == 6) or \
              (curr == 5 and nex == 6) or \
              (curr == 10 and nex == 9) or \
-             (curr == 12 and nex == 11) or \
+             (curr == 16 and nex == 11) or \
              (curr == 13 and nex == 4)) and self.state_lock == False:
 
             #Tell the driver to not look for anything while moving forward
@@ -243,7 +251,7 @@ class FiniteStateNavigator:
         #Operation on a node
         elif ((prev == 2 and curr == 3 and nex == 4) or \
              (prev == 11 and curr == 0 and nex == 1) or \
-             (prev == 12 and curr == 11 and nex == 0) or \
+             (prev == 16 and curr == 11 and nex == 0) or \
              (prev == 13 and curr == 4 and nex == 14) or \
              (prev == 13 and curr == 4 and nex == 5) or \
              (prev == 5 and curr == 6 and nex == 7) or \
@@ -265,8 +273,8 @@ class FiniteStateNavigator:
         elif ((prev == 4 and curr == 3 and nex == 0) or \
              (prev == 3 and curr == 0 and nex == 11) or \
              (prev == 13 and curr == 4 and nex == 3) or \
-             (prev == 12 and curr == 11 and nex == 15) or \
-             (prev == 12 and curr == 11 and nex == 10) or \
+             (prev == 16 and curr == 11 and nex == 15) or \
+             (prev == 16 and curr == 11 and nex == 10) or \
              (prev == 0 and curr == 11 and nex == 13) or \
              (prev == 14 and curr == 4 and nex == 12) or \
              (prev == 5 and curr == 14 and nex == 12) or \
@@ -284,13 +292,21 @@ class FiniteStateNavigator:
 
         #Operation on a node
         elif ((prev == 13 and curr == 4 and nex == 12) or \
-             (prev == 12 and curr == 11 and nex == 13)) and self.state_lock == True:
+             (prev == 16 and curr == 11 and nex == 13)) and self.state_lock == True:
                
             #Tell the driver to do a 180 turn 
-            movement = TURN_AROUND
+            #movement = TURN_AROUND
+
+            #Tell the driver to turn left. This will ensure that the car does a U-turn
+            movement = TURN_LEFT
 
             #TESTING
             print("TURN_AROUND curr: {} nex: {} prev: {}".format(curr, nex, prev))
+
+        elif ((prev == 4 and curr == 3 and nex == 4)) and self.state_lock == True:
+
+            #Tell the driver to turn right. This will ensure that the car does a U-turn
+            movement = TURN_RIGHT
 
         else:
            

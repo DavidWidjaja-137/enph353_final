@@ -9,6 +9,8 @@
 import random
 import time
 import sys
+import pickle
+import os
 
 import cv2 as cv
 import numpy as np
@@ -22,7 +24,7 @@ from geometry_msgs.msg import Twist
 #local modules
 import sift_based_car_finder
 import navigator
-#import hough_based_car_finder
+import plate_recognition
 
 #Robot Camera Parameters
 IMG_WIDTH = 640
@@ -64,11 +66,13 @@ BLUE_LOW = np.array([0,0,0])
 BLUE_HIGH = np.array([240,40,40])
 
 #Color Thresholds
-YG_THRESHOLD = 3000000
 BLUE_THRESHOLD = 4500000
-YG_THRESHOLD_LOW = 1000000
 BLUE_THRESHOLD_LOW = 500000
-#BLUE_THRESHOLD = 5500000
+
+YG_THRESHOLD_1 = 4500000
+YG_THRESHOLD_LOW_1 = 4000000
+YG_THRESHOLD_2 = 3000000
+YG_THRESHOLD_LOW_2 = 1000000
 
 # Movement Codes
 IDK = -1
@@ -100,8 +104,10 @@ n_turns = 0
 car_found = False
 previous_image = np.zeros((480, 640), np.uint8)
 
-turn_thresh = [20, 15, 20, 15]
+license_plates = []
 
+#turn_thresh = [20, 15, 20, 15]
+turn_thresh = [20, 15, 20, 15, 20, 15]
 
 #Counts the number and type of edges in the given image
 # cv_img_binary: greyscale opencv image, bgr color
@@ -248,6 +254,13 @@ def check_for_car(img, car_colour):
         #TESTING
         print("Checking for YELLOWGREEN car: {}".format(yg_sum))
 
+        if navigator.get_current_node() == 14 or navigator.get_current_node() == 12:
+            YG_THRESHOLD = YG_THRESHOLD_1
+            YG_THRESHOLD_LOW = YG_THRESHOLD_LOW_1
+        else:
+            YG_THRESHOLD = YG_THRESHOLD_2
+            YG_THRESHOLD_LOW = YG_THRESHOLD_LOW_2
+            
         if yg_sum > YG_THRESHOLD:
             print("There is a YELLOWGREEN car here")
             return True
@@ -274,6 +287,8 @@ def driver(data):
     global car_found
     global previous_image
     global previous_movement
+
+    global license_plates
 
     #Obtain and crop the raw image
     cv_img_raw = bridge.imgmsg_to_cv2(data, "bgr8")
@@ -518,7 +533,7 @@ def driver(data):
                 #Note: If the current turn is 9, don't redmask sum, because you actually
                 #      want to turn into the crosswalk
                 # TODO: Adapt this for future turns
-                if (fwd_total >= turn_thresh[n_turns % 4] or \
+                if (fwd_total >= turn_thresh[n_turns % 6] or \
                      (navigator.get_current_node() == 9 and redmask_sum > 2000000))\
                      and idk_total == 0 and mid_total == 0 and \
                      (navigator.get_current_node() == 9 or redmask_sum < 500000):
@@ -557,13 +572,16 @@ def driver(data):
                         move.angular.z = 0.0
                         pub_vel.publish(move)
 
-                        rospy.sleep(1.0)
+                        #rospy.sleep(1.0)
+                        rospy.sleep(0.5)
 
                         move = Twist()
                         move.linear.x = 0.0
                         move.linear.y = 0.0
                         move.linear.z = 0.0
                         pub_vel.publish(move)
+                        
+                        #rospy.sleep(5.0)
 
                     if navigator.get_current_node() == 0:
 
@@ -638,6 +656,11 @@ def driver(data):
         if upper_found == False:
             upper = IMG_WIDTH - 2
 
+        #TODO: See if this helps
+        if lower_found == False or upper_found == False:
+            upper = IMG_WIDTH - 2
+            lower = 0
+
         #Obtain the error
         error = IMG_WIDTH/2 - int((upper + lower)/2)
 
@@ -706,11 +729,11 @@ def driver(data):
                     else:
                         max_y = len(check_img)
                         
-                    cropped_image = check_img[min_y:max_y, edges[0][0]:edges[1][0], :]
+                    check_img = check_img[min_y:max_y, edges[0][0]:edges[1][0], :]
     
                     #TESTING
                     print("Image successfully obtained at node {}".format(new_state))
-                    cv.imshow("SIFT output at node {}".format(new_state), cropped_image)
+                    cv.imshow("SIFT output at node {}".format(new_state), check_img)
                     cv.waitKey(1)
 
                 else:
@@ -719,12 +742,25 @@ def driver(data):
                     print("Image could not be obtained at node {}".format(new_state))
                     cv.imshow("Failed SIFT at node {}".format(new_state), check_img)
                     cv.waitKey(1)
+
+                #imname = "/home/david/test{}.png".format(new_state)
+                #retval = cv.imwrite(imname, check_img)
+                #if retval is True:
+                #    print("IMG SAVED")
+                #else:
+                #    print("IMG NOT SAVED")  
                  
+                #Call NN code to read the license plate
+                
+                try:
+                    pred_vals, pred_strings = plate_reader.read_plate(check_img)
 
-                #TODO: Call NN code to read the license plate
-
-                #TODO: Check that the output of the NN is satisfactory before moving on
-                #       Otherwise, repeat the steps above
+                    license_plate_pair = pred_strings[0][0] + pred_strings[0][1]
+                except:
+                    print("ERROR: CNN did not work properly")
+                    license_plate_pair = ""
+                license_plates.append(license_plate_pair)
+        
                 navigator.unlock_current_state()
 
                 #Note: Now that a car was found, the same car should not be found again
@@ -778,11 +814,11 @@ def driver(data):
                     else:
                         max_y = len(check_img)
                         
-                    cropped_image = check_img[min_y:max_y, edges[0][0]:edges[1][0], :]
+                    check_img = check_img[min_y:max_y, edges[0][0]:edges[1][0], :]
     
                     #TESTING
                     print("Image successfully obtained at node {}".format(new_state))
-                    cv.imshow("SIFT output at node {}".format(new_state), cropped_image)
+                    cv.imshow("SIFT output at node {}".format(new_state), check_img)
                     cv.waitKey(1)
 
                 else:
@@ -791,12 +827,25 @@ def driver(data):
                     print("Image could not be obtained at node {}".format(new_state))
                     cv.imshow("Failed SIFT at node {}".format(new_state), check_img)
                     cv.waitKey(1)
-                    
+                
+                #imname = "/home/david/test{}.png".format(new_state)
+                #retval = cv.imwrite(imname, check_img)
+                #if retval is True:
+                #    print("IMG SAVED")
+                #else:
+                #    print("IMG NOT SAVED")  
                  
-                #TODO: Call NN code to read the license plate
+                #Call NN code to read the license plate
+                
+                try:
+                    pred_vals, pred_strings = plate_reader.read_plate(check_img)
 
-                #TODO: Check that the output of the NN is satisfactory before moving on
-                #        Otherwise, repeat the steps above
+                    license_plate_pair = pred_strings[0][0] + pred_strings[0][1]
+                except:
+                    print("ERROR: CNN did not work properly")
+                    license_plate_pair = ""
+                license_plates.append(license_plate_pair)
+        
                 navigator.unlock_current_state()
 
                 #Note: Now that a car was found, the same car should not be found again
@@ -1079,6 +1128,12 @@ def driver(data):
         print("Vehicle has been stopped for safety reasons. Dumping state...")
         print("f: {} l: {} r: {} m: idk: {}".format(edge_points[0], edge_points[1], \
                     edge_points[2], edge_points[3], edge_points[4]))
+       
+        print("##############") 
+        print("## D O N E  ##")
+        print("##############")
+        print("## LICENSE PLATES: {}".format(license_plates))
+        print("##############")
         
         while True:
             continue
@@ -1154,6 +1209,10 @@ car_finder = sift_based_car_finder.SIFTBasedCarFinder()
 
 #Initialize the finite state machine navigator
 navigator = navigator.FiniteStateNavigator()
+
+#Initialize the License Plate Reader
+pickle_path = os.path.dirname(os.path.realpath(__file__)) +  "/"
+plate_reader = plate_recognition.PlateReader(pickle_path+"defaultpickle.pickle")
 
 #Delay for observation purposes
 rospy.sleep(10)
