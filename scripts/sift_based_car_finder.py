@@ -21,6 +21,7 @@ import numpy as np
 #0.4 is too low
 #FILTER_MATCH_THRESHOLD = 0.5
 FILTER_MATCH_THRESHOLD = 0.7
+
 #0.8 too high for yellow
 #0.7 is okay-ish
 #0.5 too low for yellow

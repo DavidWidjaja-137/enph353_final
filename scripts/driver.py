@@ -105,7 +105,8 @@ n_turns = 0
 car_found = False
 previous_image = np.zeros((480, 640), np.uint8)
 
-turn_thresh = [20, 15, 20, 15]
+#turn_thresh = [20, 15, 20, 15]
+turn_thresh = [20, 15, 20, 15, 20, 20]
 
 #Counts the number and type of edges in the given image
 # cv_img_binary: greyscale opencv image, bgr color
@@ -529,7 +530,7 @@ def driver(data):
                 #Note: If the current turn is 9, don't redmask sum, because you actually
                 #      want to turn into the crosswalk
                 # TODO: Adapt this for future turns
-                if (fwd_total >= turn_thresh[n_turns % 4] or \
+                if (fwd_total >= turn_thresh[n_turns % 6] or \
                      (navigator.get_current_node() == 9 and redmask_sum > 2000000))\
                      and idk_total == 0 and mid_total == 0 and \
                      (navigator.get_current_node() == 9 or redmask_sum < 500000):
@@ -568,13 +569,16 @@ def driver(data):
                         move.angular.z = 0.0
                         pub_vel.publish(move)
 
-                        rospy.sleep(1.0)
+                        #rospy.sleep(1.0)
+                        rospy.sleep(0.5)
 
                         move = Twist()
                         move.linear.x = 0.0
                         move.linear.y = 0.0
                         move.linear.z = 0.0
                         pub_vel.publish(move)
+                        
+                        #rospy.sleep(5.0)
 
                     if navigator.get_current_node() == 0:
 
@@ -648,6 +652,11 @@ def driver(data):
           
         if upper_found == False:
             upper = IMG_WIDTH - 2
+
+        #TODO: See if this helps
+        if lower_found == False or upper_found == False:
+            upper = IMG_WIDTH - 2
+            lower = 0
 
         #Obtain the error
         error = IMG_WIDTH/2 - int((upper + lower)/2)
@@ -731,12 +740,12 @@ def driver(data):
                     cv.imshow("Failed SIFT at node {}".format(new_state), check_img)
                     cv.waitKey(1)
 
-                imname = "/home/david/test{}.png".format(new_state)
-                retval = cv.imwrite(imname, check_img)
-                if retval is True:
-                    print("IMG SAVED")
-                else:
-                    print("IMG NOT SAVED")
+                #imname = "/home/david/test{}.png".format(new_state)
+                #retval = cv.imwrite(imname, check_img)
+                #if retval is True:
+                #    print("IMG SAVED")
+                #else:
+                #    print("IMG NOT SAVED")
 
                 #TODO: Call NN code to read the license plate
 
@@ -809,12 +818,12 @@ def driver(data):
                     cv.imshow("Failed SIFT at node {}".format(new_state), check_img)
                     cv.waitKey(1)
                 
-                imname = "/home/david/test{}.png".format(new_state)
-                retval = cv.imwrite(imname, check_img)
-                if retval is True:
-                    print("IMG SAVED")
-                else:
-                    print("IMG NOT SAVED")  
+                #imname = "/home/david/test{}.png".format(new_state)
+                #retval = cv.imwrite(imname, check_img)
+                #if retval is True:
+                #    print("IMG SAVED")
+                #else:
+                #    print("IMG NOT SAVED")  
                  
                 #TODO: Call NN code to read the license plate
 
@@ -1102,6 +1111,10 @@ def driver(data):
         print("Vehicle has been stopped for safety reasons. Dumping state...")
         print("f: {} l: {} r: {} m: idk: {}".format(edge_points[0], edge_points[1], \
                     edge_points[2], edge_points[3], edge_points[4]))
+       
+        print("##############") 
+        print("## D O N E  ##")
+        print("##############")
         
         while True:
             continue
