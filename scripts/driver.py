@@ -106,7 +106,7 @@ car_found = False
 previous_image = np.zeros((480, 640), np.uint8)
 
 #turn_thresh = [20, 15, 20, 15]
-turn_thresh = [20, 15, 20, 15, 20, 20]
+turn_thresh = [20, 15, 20, 15, 20, 15]
 
 #Counts the number and type of edges in the given image
 # cv_img_binary: greyscale opencv image, bgr color
@@ -740,12 +740,13 @@ def driver(data):
                     cv.imshow("Failed SIFT at node {}".format(new_state), check_img)
                     cv.waitKey(1)
 
-                #imname = "/home/david/test{}.png".format(new_state)
-                #retval = cv.imwrite(imname, check_img)
-                #if retval is True:
-                #    print("IMG SAVED")
-                #else:
-                #    print("IMG NOT SAVED")
+                #Verification Image Set Generation
+                imname = "/home/david/test{}.png".format(new_state)
+                retval = cv.imwrite(imname, check_img)
+                if retval is True:
+                    print("IMG SAVED")
+                else:
+                    print("IMG NOT SAVED")
 
                 #TODO: Call NN code to read the license plate
 
@@ -818,12 +819,12 @@ def driver(data):
                     cv.imshow("Failed SIFT at node {}".format(new_state), check_img)
                     cv.waitKey(1)
                 
-                #imname = "/home/david/test{}.png".format(new_state)
-                #retval = cv.imwrite(imname, check_img)
-                #if retval is True:
-                #    print("IMG SAVED")
-                #else:
-                #    print("IMG NOT SAVED")  
+                imname = "/home/david/test{}.png".format(new_state)
+                retval = cv.imwrite(imname, check_img)
+                if retval is True:
+                    print("IMG SAVED")
+                else:
+                    print("IMG NOT SAVED")  
                  
                 #TODO: Call NN code to read the license plate
 
