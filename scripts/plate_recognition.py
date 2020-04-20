@@ -8,6 +8,7 @@ from plate_segmentation import PlateSegmentator
 class PlateReader:
 
     def __init__(self):
-        segmentator = PlateSegmentator
+        segmentator = PlateSegmentator()
+        
     
 

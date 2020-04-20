@@ -12,49 +12,66 @@ from numpy import expand_dims
 import random
 import cv2
 from matplotlib import pyplot as plt
+import pickle
+import os
 
 class PlateCNN:
     LABELS = "0123456789?ABCDEFGHIJKLMNOPQRSTUVWXYZ"
     l_ar = []
-    model_weights = ??
+    path = ''
+    pic_path = ''
 
     # list of instance variables
     # conv_model
 
-    def __init__(self):
+    def __init__(self, picklefile=None, to_picklefile='defaultpickle.pickle'):
         # setup CNN here
-        l_ar = [x for x in LABELS]
+        self.l_ar = [x for x in self.LABELS]
+        self.path = os.path.dirname(os.path.realpath(__file__)) + '/misc_plate_stuff/'
+        self.pic_path = self.path + "cnn_imgdirs/"
+        self.picklefile = picklefile
+        self.to_picklefile = to_picklefile
 
-        # TODO: read pickle
+        # TODO: read pickle to get cnn
+        if self.picklefile is not None:
+            print("Reading pickle file")
+            # open and read from pickle file
+            with open(picklefile) as f:
+                self.conv_model = pickle.load(f)
 
-        # set up CNN
-        conv_model = models.Sequential()
-        conv_model.add(layers.Conv2D(32, (3, 3), activation='relu',
-                                    input_shape=(90, 30, 3)))  # from C.shape
-        conv_model.add(layers.MaxPooling2D((2, 2)))
-        conv_model.add(layers.Conv2D(64, (3, 3), activation='relu'))
-        conv_model.add(layers.MaxPooling2D((2, 2)))
-        conv_model.add(layers.Conv2D(128, (3, 3), activation='relu'))
-        conv_model.add(layers.MaxPooling2D((2, 2)))
-        # conv_model.add(layers.Conv2D(128, (3, 3), activation='relu'))
-        # conv_model.add(layers.MaxPooling2D((2, 2)))
-        conv_model.add(layers.Flatten())
-        conv_model.add(layers.Dropout(0.5))
-        conv_model.add(layers.Dense(512, activation='relu'))
-        conv_model.add(layers.Dense(37, activation='softmax'))  # at least i think it is num labels
 
-        # sets learning rate of model, and also type
-        LEARNING_RATE = 1e-4
-        conv_model.compile(loss='categorical_crossentropy',
-                        optimizer=optimizers.RMSprop(lr=LEARNING_RATE),
-                        metrics=['acc'])
+        # set up CNN if no pickle file
+        else:
+            self.conv_model = models.Sequential()
+            self.conv_model.add(layers.Conv2D(32, (3, 3), activation='relu',
+                                        input_shape=(90, 30, 3)))  # from C.shape
+            self.conv_model.add(layers.MaxPooling2D((2, 2)))
+            self.conv_model.add(layers.Conv2D(64, (3, 3), activation='relu'))
+            self.conv_model.add(layers.MaxPooling2D((2, 2)))
+            self.conv_model.add(layers.Conv2D(128, (3, 3), activation='relu'))
+            self.conv_model.add(layers.MaxPooling2D((2, 2)))
+            # self.conv_model.add(layers.Conv2D(128, (3, 3), activation='relu'))
+            # self.conv_model.add(layers.MaxPooling2D((2, 2)))
+            self.conv_model.add(layers.Flatten())
+            self.conv_model.add(layers.Dropout(0.5))
+            self.conv_model.add(layers.Dense(512, activation='relu'))
+            self.conv_model.add(layers.Dense(37, activation='softmax'))  # at least i think it is num labels
+
+            # sets learning rate of model, and also type
+            LEARNING_RATE = 1e-4
+            self.conv_model.compile(loss='categorical_crossentropy',
+                            optimizer=optimizers.RMSprop(lr=LEARNING_RATE),
+                            metrics=['acc'])
   
 
-    def train(self):
+    def train(self, num_epochs=10):
         [X,Y] = self.generate_train_data()
         [X_v, Y_v] = self.generate_val_data()
 
-        history_conv = conv_model.fit(X, Y, validation_data=(X_v,Y_v), epochs=10, batch_size=32)
+        history_conv = self.conv_model.fit(X, Y, validation_data=(X_v,Y_v), epochs=num_epochs, batch_size=32)
+
+        # save the new weights in given pickle file
+        self.write_pickle()
 
         # display accuracy
         plt.plot(history_conv.history['acc'])
@@ -74,8 +91,6 @@ class PlateCNN:
         '''
         # generate training data (or read from directory....) and train
         # TODO: probably needs to recieve the directory names for train/val data
-        path = os.getcwd() + "/" CHANGE THIS CHANGE THIS
-        pic_path = path + "???/"
 
         def blur_img(img):
             x = random.randint(3,8)
@@ -91,7 +106,8 @@ class PlateCNN:
         
 
         # these take the images from the directories and augment them
-        train_generator = train_datagen.flow_from_directory(pic_path+"train", target_size=(90,30), batch_size=82)
+        train_generator = train_datagen.flow_from_directory(self.pic_path+"train", target_size=(90,30), batch_size=113)
+        # print("TRAIN GENERATOR LEN = {}".format(train_generator.__len__()))
         
         X = []
         Y = []
@@ -101,7 +117,7 @@ class PlateCNN:
             batch = train_generator.next()
             image = batch[0].astype('uint8')
 
-            for j in range(82):
+            for j in range(113):
                 # get label
                 label = batch[1][j].tolist()
                 ind = label.index(1)
@@ -120,7 +136,7 @@ class PlateCNN:
         # same thing for validation data
         # TODO: need to get directory path or smth
         val_datagen = ImageDataGenerator()
-        val_generator = val_datagen.flow_from_directory(pic_path+"val", target_size=(90,30), batch_size=266)
+        val_generator = val_datagen.flow_from_directory(self.pic_path+"val", target_size=(90,30), batch_size=283)
 
         X_v = []
         Y_v = []
@@ -129,7 +145,7 @@ class PlateCNN:
             batch = val_generator.next()
             image = batch[0].astype('uint8')
 
-            for j in range(188):
+            for j in range(283):
                 # get label
                 label = batch[1][j].tolist()
                 ind = label.index(1)
@@ -145,11 +161,9 @@ class PlateCNN:
 
     def write_pickle(self):
         # save values
-        pass
-    
-    def read_pickle(self):
-        # get saved values
-        pass
+        print("Pickling")
+        with open(self.to_picklefile, 'wb') as f:
+            pickle.dump(self.conv_model, f)
 
     # re-initialize model parameters. not 100% on what this means TODO figure this out
     def reset_weights(self, model):
@@ -158,5 +172,14 @@ class PlateCNN:
             if hasattr(layer, 'kernel_initializer'):
                 layer.kernel.initializer.run(session=session)
 
+    def get_summary(self):
+        self.conv_model.summary()
+
 if __name__ == '__main__':
     # train cnn here
+    # p_cnn = PlateCNN(picklefile='defaultpickle.pickle')
+    p_cnn = PlateCNN()
+    p_cnn.get_summary()
+
+    p_cnn.train(10)
+

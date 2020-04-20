@@ -183,5 +183,5 @@ for i in range(len(plate_pairs)):
             # put in folder called test_imgs_aftersplit. this is only
             #      for testing purposes change for actual cnn
             cv2.imwrite(os.path.join(dirpath + "/test_imgs_aftersplit/", 
-                                "a{}{}{}.png".format(i, j, count)), temp)
+                                "q{}{}{}.png".format(i, j, count)), temp)
 
