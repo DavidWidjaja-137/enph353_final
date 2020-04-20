@@ -1,6 +1,6 @@
-#David's Project Log
+# David's Project Log
 
-###Project Log: Start of Project
+### Project Log: Start of Project
 
 **Tasks:**
 - implement the ability to stop for license plates, take images of license plates, and seperate the junk from the license plate.                                                                         
@@ -8,7 +8,7 @@
 - allow for some recovery when the robot veers of course AND hits a junction, otherwise it will enter the unknown state
 - method of variations is still not working to read changes   
 
-###Project Log: 06 May 2020
+### Project Log: 06 May 2020
 
 **Tasks:**
 - Implement the ability to stop for license plates, take images of license plates, and seperate the junk from the license plate.                                                                         
@@ -30,7 +30,7 @@
 
 Conclusion, Method 2 is better for this case.
 
-###Project Log: 10 May 2020
+### Project Log: 10 May 2020
 
 **Method 3: Lazy**
 1. Threshold the image to reveal only the license plates
@@ -46,7 +46,7 @@ Note: SIFT, or the way I am using it, is too finicky to detect the corners of th
 
 Turns out Method 3 is a pain. Method 2 it is then.
 
-###Project Log: 13 May 2020
+### Project Log: 13 May 2020
 
 **Design a system of knowing where the vehicle is at any moment**
 
@@ -124,7 +124,7 @@ If the car is still there
 If the car is no longer there
     Keep the flag to False. The car can now use SIFT again
 
-###Project Log: 19 April 2020
+### Project Log: 19 April 2020
 
 **Remaining Issues**
 
